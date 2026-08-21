@@ -1,30 +1,231 @@
-import 'package:clinicore_flutter/core/routes/app_path.dart';
-import 'package:clinicore_flutter/core/routes/path_name.dart';
-import 'package:clinicore_flutter/features/auth/presentation/screens/login_screen.dart';
-import 'package:clinicore_flutter/features/home/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/blocs/auth/auth_bloc.dart';
+import '../../features/auth/presentation/blocs/registration/registration_bloc.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/login_screen.dart';
+import '../../features/auth/presentation/screens/otp_screen.dart';
+import '../../features/auth/presentation/screens/register_profile_screen.dart';
+import '../../features/auth/presentation/screens/register_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_screen.dart';
+import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../features/home/presentation/screens/appointments_screen.dart';
+import '../../features/home/presentation/screens/booking_screen.dart';
+import '../../features/home/presentation/screens/history_screen.dart';
+import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/home/presentation/screens/personal_info_screen.dart';
+import '../../features/home/presentation/screens/privacy_screen.dart';
+import '../../features/home/presentation/screens/profile_screen.dart';
+import '../../features/home/presentation/screens/terms_screen.dart';
+import '../di/injection.dart';
+import 'app_path.dart';
+import 'go_router_refresh_stream.dart';
+import 'path_name.dart';
+
+/// The app's router.
+///
+/// Three layers, and each boundary is load-bearing:
+///
+/// * **The auth guard** ([_redirect]) decides, for every navigation, whether
+///   the target is reachable with the session the app currently has. It is the
+///   only place that decision is made — screens never check "am I logged in?"
+///   and then push somewhere else, because a guard spread across twelve
+///   screens is a guard with eleven holes.
+/// * **The registration `ShellRoute`** owns one [RegistrationBloc] for all
+///   three sign-up steps. The email and cedula from step 1 have to survive two
+///   pushes, and the server rejects step 3 if the email does not match.
+/// * **The `StatefulShellRoute`** owns the four tabs, each with its own
+///   navigator so their back stacks are independent.
 class AppRouter {
-  static GoRouter get router => _goRouter;
+  AppRouter(this._authBloc);
+
+  final AuthBloc _authBloc;
+
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
-  static final GoRouter _goRouter = GoRouter(
+  // One navigator per tab. Without these, all four branches share a stack and
+  // the back button walks across tabs.
+  static final _bookingNavigatorKey = GlobalKey<NavigatorState>();
+  static final _appointmentsNavigatorKey = GlobalKey<NavigatorState>();
+  static final _historyNavigatorKey = GlobalKey<NavigatorState>();
+  static final _profileNavigatorKey = GlobalKey<NavigatorState>();
+
+  late final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: AppPath.loginScreen,
-    routes: [
+    initialLocation: AppPath.splashScreen,
+
+    // Re-runs [_redirect] whenever the session changes. This is what makes
+    // login, sign-out and an expired token all navigate by themselves: no
+    // screen pushes a route on success, it just reports the new session and
+    // the router does the rest.
+    refreshListenable: GoRouterRefreshStream(_authBloc.stream),
+    redirect: _redirect,
+
+    routes: <RouteBase>[
+      GoRoute(
+        path: AppPath.splashScreen,
+        name: PathName.splashScreen,
+        builder: (context, state) => const SplashScreen(),
+      ),
+
+      // ======================================================
+      // AUTH
+      // ======================================================
       GoRoute(
         path: AppPath.loginScreen,
         name: PathName.loginScreen,
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => LoginScreen(),
+        builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
-        path: AppPath.homeScreen,
-        name: PathName.homeScreen,
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => HomeScreen(),
+        path: AppPath.forgotPasswordScreen,
+        name: PathName.forgotPasswordScreen,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+
+      // Reachable but not yet reachable FROM anywhere: password recovery has
+      // no server endpoints, so nothing routes into this screen today. It is
+      // kept routed rather than orphaned so it stays testable and demoable,
+      // and so the day the two endpoints ship the only change is the screen
+      // that leads here.
+      GoRoute(
+        path: '/nueva-contrasena',
+        builder: (context, state) => const ResetPasswordScreen(),
+      ),
+
+      // ======================================================
+      // REGISTRATION — one bloc, three steps
+      // ======================================================
+      ShellRoute(
+        builder: (context, state, child) => BlocProvider<RegistrationBloc>(
+          create: (_) => sl<RegistrationBloc>(),
+          child: child,
+        ),
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppPath.registerScreen,
+            name: PathName.registerScreen,
+            builder: (context, state) => const RegisterScreen(),
+          ),
+          GoRoute(
+            path: AppPath.registerVerificationScreen,
+            name: PathName.registerVerificationScreen,
+            builder: (context, state) => const OtpScreen(),
+          ),
+          GoRoute(
+            path: AppPath.registerProfileScreen,
+            name: PathName.registerProfileScreen,
+            builder: (context, state) => const RegisterProfileScreen(),
+          ),
+        ],
+      ),
+
+      // ======================================================
+      // PUBLIC DOCUMENTS — readable with or without a session
+      // ======================================================
+      GoRoute(
+        path: AppPath.termsScreen,
+        name: PathName.termsScreen,
+        builder: (context, state) => const TermsScreen(),
+      ),
+      GoRoute(
+        path: AppPath.privacyScreen,
+        name: PathName.privacyScreen,
+        builder: (context, state) => const PrivacyScreen(),
+      ),
+
+      // ======================================================
+      // AUTHENTICATED
+      // ======================================================
+      GoRoute(
+        path: AppPath.personalInfoScreen,
+        name: PathName.personalInfoScreen,
+        builder: (context, state) => const PersonalInfoScreen(),
+      ),
+
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            HomeScreen(shell: navigationShell),
+        branches: <StatefulShellBranch>[
+          StatefulShellBranch(
+            navigatorKey: _bookingNavigatorKey,
+            routes: <RouteBase>[
+              GoRoute(
+                path: AppPath.bookingScreen,
+                name: PathName.bookingScreen,
+                builder: (context, state) => const BookingScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _appointmentsNavigatorKey,
+            routes: <RouteBase>[
+              GoRoute(
+                path: AppPath.appointmentsScreen,
+                name: PathName.appointmentsScreen,
+                builder: (context, state) => const AppointmentsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _historyNavigatorKey,
+            routes: <RouteBase>[
+              GoRoute(
+                path: AppPath.historyScreen,
+                name: PathName.historyScreen,
+                builder: (context, state) => const HistoryScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _profileNavigatorKey,
+            routes: <RouteBase>[
+              GoRoute(
+                path: AppPath.profileScreen,
+                name: PathName.profileScreen,
+                builder: (context, state) => const ProfileScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
     ],
   );
+
+  /// The auth guard.
+  ///
+  /// Returning `null` means "this location is fine". Returning a path means
+  /// "go there instead". The order of the four checks below is the logic:
+  ///
+  /// 1. The legal documents are always reachable — a patient must be able to
+  ///    read the terms before agreeing to them, which is before they have an
+  ///    account.
+  /// 2. While the session is still unknown, everything funnels to the splash.
+  ///    This is what stops the login form flashing at a patient who is already
+  ///    signed in.
+  /// 3. No session: only the auth flow is reachable.
+  /// 4. A session: the auth flow is NOT reachable, so the back button after
+  ///    logging in cannot walk back into the login form.
+  String? _redirect(BuildContext context, GoRouterState state) {
+    final String location = state.matchedLocation;
+    final AuthState auth = _authBloc.state;
+
+    if (AppPath.publicPaths.contains(location)) return null;
+
+    if (!auth.isResolved) {
+      return location == AppPath.splashScreen ? null : AppPath.splashScreen;
+    }
+
+    final bool onAuthFlow = AppPath.isAuthFlow(location);
+
+    if (!auth.isAuthenticated) {
+      // The splash is part of the auth flow but is not a destination once the
+      // session has resolved — otherwise the app sits on it forever.
+      final bool canStay = onAuthFlow && location != AppPath.splashScreen;
+      return canStay ? null : AppPath.loginScreen;
+    }
+
+    return onAuthFlow ? AppPath.bookingScreen : null;
+  }
 }
