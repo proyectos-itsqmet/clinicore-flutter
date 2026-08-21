@@ -1,7 +1,69 @@
+/// Every location in the app, as a URL.
+///
+/// The paths are in Spanish because they are user-visible: they show up in
+/// deep links, in the browser bar on Flutter web, and in analytics.
+/// `/agendar` tells a Spanish-speaking user what they are looking at;
+/// `/booking` does not.
 class AppPath {
-  //! Auth
-  static const loginScreen = '/login';
+  /// Where every cold start lands.
+  ///
+  /// It exists to cover the gap between "the app started" and "we know whether
+  /// anyone is signed in". Without it, a returning patient sees the login
+  /// screen for a frame before being thrown into the app — which reads as a
+  /// bug and, worse, invites them to start typing.
+  static const splashScreen = '/';
 
-  //! Home
-  static const homeScreen = '/home';
+  //! Auth — all outside the shell, so they cover the whole screen.
+  static const loginScreen = '/login';
+  static const forgotPasswordScreen = '/recuperar-contrasena';
+
+  //! Registration — a three-step flow under one prefix.
+  //!
+  //! The prefix is what lets the router wrap all three in a single
+  //! `ShellRoute` that owns the `RegistrationBloc`: the email and cedula from
+  //! step 1 have to survive two pushes, and the server rejects step 3 if the
+  //! email does not match what step 1 registered.
+  static const registerScreen = '/registro';
+  static const registerVerificationScreen = '/registro/verificacion';
+  static const registerProfileScreen = '/registro/datos';
+
+  //! Home — the four branches of the bottom navigation. Each is the root of
+  //! its own stack, which is what lets a tab keep its scroll position and its
+  //! half-filled form when you leave and come back.
+  static const bookingScreen = '/agendar';
+  static const appointmentsScreen = '/mis-citas';
+  static const historyScreen = '/historial';
+  static const profileScreen = '/perfil';
+
+  //! Profile destinations, as TOP-LEVEL routes rather than children of
+  //! [profileScreen].
+  //!
+  //! [termsScreen] and [privacyScreen] are reached from two places — the
+  //! profile tab AND the consent line on the registration screen, which lives
+  //! outside the shell and outside any session. As children of the profile
+  //! branch, pushing them from registration would have to build the shell (and
+  //! pass the auth guard) underneath them. As top-level public routes, both
+  //! callers push the same absolute path and get the same full-screen
+  //! document.
+  static const personalInfoScreen = '/mi-informacion';
+  static const termsScreen = '/terminos';
+  static const privacyScreen = '/privacidad';
+
+  /// Locations reachable with or without a session.
+  ///
+  /// The two legal documents, and only those. A patient has to be able to read
+  /// the terms BEFORE agreeing to them, which means before having an account.
+  static const Set<String> publicPaths = <String>{termsScreen, privacyScreen};
+
+  /// Locations that are part of signing in or signing up.
+  ///
+  /// An authenticated patient who lands on one of these is bounced to
+  /// [bookingScreen] — otherwise the back button after login walks straight
+  /// back into the login form.
+  static bool isAuthFlow(String location) {
+    return location == splashScreen ||
+        location == loginScreen ||
+        location == forgotPasswordScreen ||
+        location.startsWith(registerScreen);
+  }
 }
