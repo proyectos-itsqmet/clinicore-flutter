@@ -3,10 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/blocs/auth/auth_bloc.dart';
+import '../../features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import '../../features/auth/presentation/blocs/registration/registration_bloc.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/otp_screen.dart';
+import '../../features/auth/presentation/screens/recovery_code_screen.dart';
 import '../../features/auth/presentation/screens/register_profile_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
@@ -78,20 +80,35 @@ class AppRouter {
         name: PathName.loginScreen,
         builder: (context, state) => const LoginScreen(),
       ),
-      GoRoute(
-        path: AppPath.forgotPasswordScreen,
-        name: PathName.forgotPasswordScreen,
-        builder: (context, state) => const ForgotPasswordScreen(),
-      ),
-
-      // Reachable but not yet reachable FROM anywhere: password recovery has
-      // no server endpoints, so nothing routes into this screen today. It is
-      // kept routed rather than orphaned so it stays testable and demoable,
-      // and so the day the two endpoints ship the only change is the screen
-      // that leads here.
-      GoRoute(
-        path: '/nueva-contrasena',
-        builder: (context, state) => const ResetPasswordScreen(),
+      // ======================================================
+      // PASSWORD RECOVERY — one bloc, three steps
+      // ======================================================
+      //
+      // Same shape as registration, for the same reason: the address from step
+      // 1 has to survive two pushes, and each step authenticates with the
+      // short-lived token the previous one issued.
+      ShellRoute(
+        builder: (context, state, child) => BlocProvider<RecoveryBloc>(
+          create: (_) => sl<RecoveryBloc>(),
+          child: child,
+        ),
+        routes: <RouteBase>[
+          GoRoute(
+            path: AppPath.forgotPasswordScreen,
+            name: PathName.forgotPasswordScreen,
+            builder: (context, state) => const ForgotPasswordScreen(),
+          ),
+          GoRoute(
+            path: AppPath.recoveryCodeScreen,
+            name: PathName.recoveryCodeScreen,
+            builder: (context, state) => const RecoveryCodeScreen(),
+          ),
+          GoRoute(
+            path: AppPath.recoveryPasswordScreen,
+            name: PathName.recoveryPasswordScreen,
+            builder: (context, state) => const ResetPasswordScreen(),
+          ),
+        ],
       ),
 
       // ======================================================

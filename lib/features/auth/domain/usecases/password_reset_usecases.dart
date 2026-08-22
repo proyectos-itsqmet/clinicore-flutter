@@ -5,33 +5,38 @@ import '../../../../core/error/failures.dart';
 import '../../../../core/usecase/usecase.dart';
 import '../repositories/auth_repository.dart';
 
-/// Asks the server to start a password reset.
+/// Password recovery, in the three steps the server actually implements.
 ///
-/// **Both use cases in this file currently fail with
-/// `NotImplementedOnServerFailure`.** The QMS backend has no password recovery
-/// of any kind: `AuthController` exposes login and the two registration steps,
-/// and nothing else.
+/// The shape mirrors registration for a reason beyond consistency: both flows
+/// are a chain of short-lived tokens where each step authorises the next, so
+/// each step has to be its own use case. Folding them into one call would mean
+/// a single failure could not say WHICH step failed — and "the code was wrong"
+/// and "your five minutes ran out" need different recoveries.
 ///
-/// They exist anyway, and that is a deliberate call rather than dead code. The
-/// screen, the bloc, the validation and the wiring are all finished and
-/// correct; the only thing missing is two routes on the server. When those
-/// ship, the change is three lines in `AuthRemoteDataSource` and nothing else
-/// moves. The alternative — leaving the screens unwired — would mean
-/// rediscovering this whole flow later.
-class RequestPasswordReset
-    implements UseCase<Unit, RequestPasswordResetParams> {
-  const RequestPasswordReset(this._repository);
+/// | step                    | window | on success the server issues |
+/// |-------------------------|--------|------------------------------|
+/// | [InitPasswordRecovery]  | —      | `ROLE_OTP_PENDING`, 300s     |
+/// | [VerifyRecoveryOtp]     | 300s   | `ROLE_CHANGE_PASSWORD`, 600s |
+/// | [ChangePassword]        | 600s   | nothing; the cookie is cleared |
+
+/// Step 1 — asks the server to mail a 6-digit code.
+///
+/// The address may belong to a patient, a doctor or an operator; the server
+/// checks all three tables. A 404 means it belongs to nobody.
+class InitPasswordRecovery
+    implements UseCase<Unit, InitPasswordRecoveryParams> {
+  const InitPasswordRecovery(this._repository);
 
   final AuthRepository _repository;
 
   @override
-  Future<Either<Failure, Unit>> call(RequestPasswordResetParams params) {
-    return _repository.requestPasswordReset(email: params.email);
+  Future<Either<Failure, Unit>> call(InitPasswordRecoveryParams params) {
+    return _repository.initPasswordRecovery(email: params.email);
   }
 }
 
-class RequestPasswordResetParams extends Equatable {
-  const RequestPasswordResetParams({required this.email});
+class InitPasswordRecoveryParams extends Equatable {
+  const InitPasswordRecoveryParams({required this.email});
 
   final String email;
 
@@ -39,39 +44,65 @@ class RequestPasswordResetParams extends Equatable {
   List<Object?> get props => <Object?>[email];
 }
 
-/// Sets a new password using the emailed code. See [RequestPasswordReset].
-class ConfirmPasswordReset
-    implements UseCase<Unit, ConfirmPasswordResetParams> {
-  const ConfirmPasswordReset(this._repository);
+/// Step 2 — the code.
+///
+/// No email parameter, and that is not an omission: the server reads it from
+/// step 1's token. Passing it again would create two sources of truth for the
+/// one thing the whole flow hinges on.
+class VerifyRecoveryOtp implements UseCase<Unit, VerifyRecoveryOtpParams> {
+  const VerifyRecoveryOtp(this._repository);
 
   final AuthRepository _repository;
 
   @override
-  Future<Either<Failure, Unit>> call(ConfirmPasswordResetParams params) {
-    return _repository.confirmPasswordReset(
-      email: params.email,
-      otp: params.otp,
-      newPassword: params.newPassword,
+  Future<Either<Failure, Unit>> call(VerifyRecoveryOtpParams params) {
+    return _repository.verifyRecoveryOtp(otp: params.otp);
+  }
+}
+
+class VerifyRecoveryOtpParams extends Equatable {
+  const VerifyRecoveryOtpParams({required this.otp});
+
+  final String otp;
+
+  @override
+  List<Object?> get props => <Object?>[otp];
+
+  @override
+  String toString() => 'VerifyRecoveryOtpParams(otp: <redacted>)';
+}
+
+/// Step 3 — the new password.
+///
+/// Both fields go to the server because the server is what compares them. The
+/// form checks it first so the patient hears about a typo before a round trip,
+/// but the server's answer is the one that decides.
+class ChangePassword implements UseCase<Unit, ChangePasswordParams> {
+  const ChangePassword(this._repository);
+
+  final AuthRepository _repository;
+
+  @override
+  Future<Either<Failure, Unit>> call(ChangePasswordParams params) {
+    return _repository.changePassword(
+      password: params.password,
+      repeatedPassword: params.repeatedPassword,
     );
   }
 }
 
-class ConfirmPasswordResetParams extends Equatable {
-  const ConfirmPasswordResetParams({
-    required this.email,
-    required this.otp,
-    required this.newPassword,
+class ChangePasswordParams extends Equatable {
+  const ChangePasswordParams({
+    required this.password,
+    required this.repeatedPassword,
   });
 
-  final String email;
-  final String otp;
-  final String newPassword;
+  final String password;
+  final String repeatedPassword;
 
   @override
-  List<Object?> get props => <Object?>[email, otp, newPassword];
+  List<Object?> get props => <Object?>[password, repeatedPassword];
 
   @override
-  String toString() =>
-      'ConfirmPasswordResetParams($email, otp: <redacted>, '
-      'newPassword: <redacted>)';
+  String toString() => 'ChangePasswordParams(<redacted>)';
 }

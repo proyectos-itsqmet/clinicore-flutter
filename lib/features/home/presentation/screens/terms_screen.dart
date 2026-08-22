@@ -16,7 +16,6 @@ class TermsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const LegalDocument(
       title: 'Terminos y condiciones',
-      lastUpdated: '[FECHA]',
       intro:
           'Estas condiciones regulan el uso de la aplicacion de [NOMBRE DE LA '
           'CLINICA] para agendar turnos y consultar tu informacion clinica.',

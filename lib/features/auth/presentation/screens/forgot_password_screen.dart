@@ -1,127 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constant/app_icons.dart';
+import '../../../../core/routes/app_path.dart';
 import '../../../../core/theme/theme.dart';
+import '../../../../shared/helpers/validators.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
-import '../../../../shared/ui/molecules/molecules.dart';
+import '../blocs/recovery/recovery_bloc.dart';
 import '../widgets/auth_form_shell.dart';
+import '../widgets/recovery_flow_listeners.dart';
 
-/// Password recovery — currently unavailable, and this screen says so.
+/// Step 1 of 3 — the address to mail the code to.
 ///
-/// ## Why there is no form here
+/// ## Email only, not cedula
 ///
-/// The QMS backend has no password recovery. `AuthController` exposes
-/// `login-patient`, `mobile/login-patient`, `init-registration-patient` and
-/// `register-patient`, and nothing else; there is no `forgot-password`, no
-/// `reset-password`, and no token-by-mail flow to hang them on.
+/// Login takes either, but `RecoverPasswordInitBody` has one field and it is
+/// `@Email`. That is not an oversight on the server: the code has to be
+/// delivered somewhere, and a cedula is not a delivery address.
 ///
-/// A form would therefore be a lie. The patient would type their address, tap
-/// "Enviar codigo", get a spinner and then either an error or — worse, if
-/// someone had stubbed it optimistically — a success message for a mail that
-/// was never sent. Then they would wait. For a clinic, that is not a rough
-/// edge: it is a patient who cannot get to tomorrow's appointment.
+/// ## The 404 is shown, not hidden
 ///
-/// So the screen tells the truth and points at the channel that does exist.
-/// The domain side is finished and waiting — `RequestPasswordReset` and
-/// `ConfirmPasswordReset` are written, registered in the service locator, and
-/// return `NotImplementedOnServerFailure` — so restoring the form when the two
-/// endpoints ship means putting the fields back and deleting this notice.
-/// `reset_password_screen.dart` is already built for the second half.
-class ForgotPasswordScreen extends StatelessWidget {
+/// `initPasswordRecovery` answers 404 "No existe un usuario con ese correo"
+/// when the address belongs to nobody, and this screen surfaces that verbatim.
+///
+/// The usual argument against it is account enumeration — a stranger can learn
+/// which addresses are registered. That argument is real, and it loses here:
+/// this is a clinic. A patient who mistyped their own address and is told
+/// "listo, revisa tu correo" will wait for a mail that is never coming, and
+/// then miss an appointment. The honest answer costs an enumeration oracle;
+/// the vague one costs a consultation. If the clinic ever decides otherwise,
+/// the change belongs on the SERVER — always answering 200 — not here.
+///
+/// Navigation is wired through [RecoveryFlowListeners], which explains why it
+/// must react to step changes and not to status changes.
+class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _email = TextEditingController();
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    context.read<RecoveryBloc>().add(
+      RecoveryEmailSubmitted(_email.text.trim()),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return AuthFormShell(
-      kicker: 'Recuperar acceso',
-      title: 'Te ayudamos por telefono.',
-      subtitle: 'Todavia no podemos restablecer la contrasena desde la app.',
-      onBack: () => context.pop(),
-      footer: AuthFooterLink(
-        message: 'Ya la recordaste?',
-        actionLabel: 'Volver al inicio',
-        onTap: () => context.pop(),
-      ),
-      children: <Widget>[
-        AppCard(
-          padding: const EdgeInsets.all(AppSpacing.cardPad),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: AppSpacing.lg,
+    return RecoveryFlowListeners(
+      onStepChanged: (BuildContext context, RecoveryState state) {
+        if (state.step == RecoveryStep.code) {
+          context.push(AppPath.recoveryCodeScreen);
+        }
+      },
+      child: BlocBuilder<RecoveryBloc, RecoveryState>(
+        builder: (BuildContext context, RecoveryState state) {
+          return AuthFormShell(
+            kicker: 'Paso 1 de 3',
+            title: 'Recuperemos tu acceso.',
+            subtitle:
+                'Te enviamos un codigo de 6 digitos al correo con el que te '
+                'registraste.',
+            onBack: () => context.pop(),
+            footer: AuthFooterLink(
+              message: 'Ya la recordaste?',
+              actionLabel: 'Volver al inicio',
+              onTap: () => context.go(AppPath.loginScreen),
+            ),
             children: <Widget>[
+              Form(
+                key: _formKey,
+                child: AppTextField(
+                  label: 'Correo',
+                  controller: _email,
+                  hint: 'tu@correo.com',
+                  prefixIcon: AppIcons.email,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  enabled: !state.isSubmitting,
+                  autofillHints: const <String>[AutofillHints.username],
+                  validator: Validators.email,
+                  onSubmitted: (_) => _submit(),
+                ),
+              ),
+
+              AppButton(
+                label: 'Enviar codigo',
+                size: AppButtonSize.lg,
+                fullWidth: true,
+                isLoading: state.isSubmitting,
+                trailing: const Icon(AppIcons.arrowRight),
+                onPressed: _submit,
+              ),
+
+              // The clock starts the moment the mail is sent, so saying so
+              // before the patient leaves the app to check it is worth a line.
               Row(
-                spacing: AppSpacing.lg,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: AppSpacing.md,
                 children: <Widget>[
-                  const AppIconTile(icon: AppIcons.info, size: 34),
+                  const Icon(AppIcons.info, size: 16, color: AppColors.ink3),
                   Expanded(
                     child: Text(
-                      'Que hacer mientras tanto',
-                      style: AppTypography.h3.copyWith(fontSize: 16),
+                      'El codigo vence en 5 minutos. Si no llega, revisa la '
+                      'carpeta de correo no deseado.',
+                      style: AppTypography.cap,
                     ),
                   ),
                 ],
               ),
-              Text(
-                'Llama a la clinica al [NUMERO] o acercate a recepcion con '
-                'tu cedula. El personal puede restablecer tu contrasena en '
-                'el momento.',
-                style: AppTypography.body.copyWith(fontSize: 15),
-              ),
-              const AppHairline(),
-              Text(
-                'Si tu correo sigue activo y recuerdas tu cedula, tambien '
-                'puedes ingresar con la cedula en lugar del correo.',
-                style: AppTypography.cap,
-              ),
             ],
-          ),
-        ),
-
-        // Visible in the running app on purpose: a gap this size should not
-        // live only in a code comment. `gold` and not `emergency` — this is a
-        // note for the team, not an error the patient caused.
-        AppCard(
-          padding: const EdgeInsets.all(AppSpacing.cardPad),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: AppSpacing.lg,
-            children: <Widget>[
-              const AppIconTile(
-                icon: AppIcons.warning,
-                size: 34,
-                tone: AppIconTileTone.gold,
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: AppSpacing.xs,
-                  children: <Widget>[
-                    Text(
-                      'Pendiente en el servidor',
-                      style: AppTypography.h3.copyWith(fontSize: 15),
-                    ),
-                    Text(
-                      'El backend no tiene endpoints de recuperacion de '
-                      'contrasena. La app ya tiene el flujo armado y lo '
-                      'habilita en cuanto existan.',
-                      style: AppTypography.cap,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        AppButton(
-          label: 'Volver a ingresar',
-          size: AppButtonSize.lg,
-          fullWidth: true,
-          variant: AppButtonVariant.ghost,
-          onPressed: () => context.pop(),
-        ),
-      ],
+          );
+        },
+      ),
     );
   }
 }

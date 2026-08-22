@@ -10,10 +10,21 @@ enum Gender {
 
   final String apiValue;
 
-  /// What the patient sees. Spanish, and no "prefiero no decir" option —
-  /// [Gender] is optional in `PatientDTO`, so declining is expressed by
-  /// leaving it null, not by a third value that means the same thing.
+  /// What the patient sees, in Spanish.
   final String label;
+
+  /// The options this app OFFERS, which is not the same list as [values].
+  ///
+  /// [other] is deliberately absent: the mobile form asks for **sex** as a
+  /// clinical field and requires one of two answers.
+  ///
+  /// It stays in the enum rather than being deleted, and that distinction is
+  /// the point — `GENDER_OTHER` is still a legal value of
+  /// `com.devluis.types.Gender`, so a record created through the Angular panel
+  /// can carry it. Deleting the case would make [fromApi] return null for
+  /// those patients and the app would silently render them as having no sex on
+  /// file. Narrow what you WRITE; keep parsing everything the server can SEND.
+  static const List<Gender> selectable = <Gender>[male, female];
 
   static Gender? fromApi(String? raw) {
     if (raw == null) return null;

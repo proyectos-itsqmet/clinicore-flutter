@@ -2,10 +2,12 @@ import 'package:clinicore_flutter/core/error/failures.dart';
 import 'package:clinicore_flutter/features/auth/domain/entities/auth_session.dart';
 import 'package:clinicore_flutter/features/auth/domain/entities/patient_registration.dart';
 import 'package:clinicore_flutter/features/auth/domain/usecases/login_usecases.dart';
+import 'package:clinicore_flutter/features/auth/domain/usecases/password_reset_usecases.dart';
 import 'package:clinicore_flutter/features/auth/domain/usecases/registration_usecases.dart';
 import 'package:clinicore_flutter/features/auth/domain/usecases/session_usecases.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/auth/auth_bloc.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/login/login_bloc.dart';
+import 'package:clinicore_flutter/features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/registration/registration_bloc.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +33,12 @@ void main() {
   RegistrationBloc buildRegistrationBloc() => RegistrationBloc(
     initRegistration: InitRegistration(repository),
     completeRegistration: CompleteRegistration(repository),
+  );
+
+  RecoveryBloc buildRecoveryBloc() => RecoveryBloc(
+    initPasswordRecovery: InitPasswordRecovery(repository),
+    verifyRecoveryOtp: VerifyRecoveryOtp(repository),
+    changePassword: ChangePassword(repository),
   );
 
   group('AuthBloc', () {
@@ -380,5 +388,197 @@ void main() {
         await bloc.close();
       },
     );
+  });
+
+  group('RecoveryBloc', () {
+    test('walks email -> code -> password -> done', () async {
+      final RecoveryBloc bloc = buildRecoveryBloc();
+      expect(bloc.state.step, RecoveryStep.email);
+
+      bloc.add(const RecoveryEmailSubmitted('ana@clinica.ec'));
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.code);
+
+      bloc.add(const RecoveryCodeSubmitted('123456'));
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.password);
+
+      bloc.add(
+        const RecoveryPasswordSubmitted(
+          password: 'clinica1',
+          repeatedPassword: 'clinica1',
+        ),
+      );
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.done);
+
+      expect(repository.lastRecoveryEmail, 'ana@clinica.ec');
+      expect(repository.lastRecoveryOtp, '123456');
+      expect(repository.lastNewPassword, 'clinica1');
+      await bloc.close();
+    });
+
+    test('holds the email so the code screen can show it', () async {
+      // The server reads the address off the flash token, so it is never sent
+      // again — but the patient still has to be told where to look.
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryEmailSubmitted('ana@clinica.ec'));
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.step == RecoveryStep.code,
+      );
+
+      expect(state.email, 'ana@clinica.ec');
+      await bloc.close();
+    });
+
+    test('sends both password fields, because the server compares them', () async {
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(
+          const RecoveryPasswordSubmitted(
+            password: 'clinica1',
+            repeatedPassword: 'clinica2',
+          ),
+        );
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.done);
+
+      expect(repository.lastNewPassword, 'clinica1');
+      expect(repository.lastRepeatedPassword, 'clinica2');
+      await bloc.close();
+    });
+
+    test('an unknown address stays on step 1', () async {
+      repository.initPasswordRecoveryResult = const Left<Failure, Unit>(
+        ValidationFailure(message: 'No existe un usuario con ese correo'),
+      );
+
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryEmailSubmitted('nadie@clinica.ec'));
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.status == RecoveryStatus.failure,
+      );
+
+      expect(state.step, RecoveryStep.email);
+      expect(state.failure?.message, 'No existe un usuario con ese correo');
+      await bloc.close();
+    });
+
+    test('the 300-second cliff walks the code step back to step 1', () async {
+      // The flash token from step 1 expiring arrives as a 401 ->
+      // SessionExpiredFailure. Showing "sesion vencida" to someone who has no
+      // session is nonsense; the useful answer is a new code.
+      repository.verifyRecoveryOtpResult = const Left<Failure, Unit>(
+        SessionExpiredFailure(),
+      );
+
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryCodeSubmitted('123456'));
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.status == RecoveryStatus.failure,
+      );
+
+      expect(state.step, RecoveryStep.email);
+      expect(state.failure, isA<ValidationFailure>());
+      expect(state.failure?.message, contains('cinco minutos'));
+      await bloc.close();
+    });
+
+    test('the 600-second cliff walks back only to the code step', () async {
+      // Back to the CODE step, not the email step: the address is still
+      // verified, so retyping it would be punishment for the clock.
+      repository.changePasswordResult = const Left<Failure, Unit>(
+        SessionExpiredFailure(),
+      );
+
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(
+          const RecoveryPasswordSubmitted(
+            password: 'clinica1',
+            repeatedPassword: 'clinica1',
+          ),
+        );
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.status == RecoveryStatus.failure,
+      );
+
+      expect(state.step, RecoveryStep.code);
+      await bloc.close();
+    });
+
+    test('a wrong code keeps the patient on the code step', () async {
+      repository.verifyRecoveryOtpResult = const Left<Failure, Unit>(
+        ValidationFailure(message: 'Código OTP incorrecto o expirado'),
+      );
+
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryEmailSubmitted('ana@clinica.ec'));
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.code);
+
+      bloc.add(const RecoveryCodeSubmitted('000000'));
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.status == RecoveryStatus.failure,
+      );
+
+      // Still on `code`, so they can try again — the server owns the 3-attempt
+      // budget, not the bloc.
+      expect(state.step, RecoveryStep.code);
+      await bloc.close();
+    });
+
+    test('resending re-runs step 1 with the held address', () async {
+      // The only escape from a code blocked by three wrong tries.
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryEmailSubmitted('ana@clinica.ec'));
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.code);
+      expect(repository.initPasswordRecoveryCount, 1);
+
+      bloc.add(const RecoveryCodeResendRequested());
+      await bloc.stream.firstWhere(
+        (s) => s.status == RecoveryStatus.idle && !s.isSubmitting,
+      );
+
+      expect(repository.initPasswordRecoveryCount, 2);
+      expect(repository.lastRecoveryEmail, 'ana@clinica.ec');
+      await bloc.close();
+    });
+
+    test('resending without an address does nothing', () async {
+      // Only reachable by deep-linking straight to the code screen.
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryCodeResendRequested());
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.initPasswordRecoveryCount, 0);
+      await bloc.close();
+    });
+
+    test('dismissing the failure clears it', () async {
+      repository.initPasswordRecoveryResult = const Left<Failure, Unit>(
+        ValidationFailure(message: 'No existe un usuario con ese correo'),
+      );
+
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryEmailSubmitted('nadie@clinica.ec'));
+      await bloc.stream.firstWhere((s) => s.status == RecoveryStatus.failure);
+
+      bloc.add(const RecoveryFailureDismissed());
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.status == RecoveryStatus.idle,
+      );
+
+      expect(state.failure, isNull);
+      await bloc.close();
+    });
+
+    test('restarting forgets the address', () async {
+      final RecoveryBloc bloc = buildRecoveryBloc()
+        ..add(const RecoveryEmailSubmitted('ana@clinica.ec'));
+      await bloc.stream.firstWhere((s) => s.step == RecoveryStep.code);
+
+      bloc.add(const RecoveryRestarted());
+      final RecoveryState state = await bloc.stream.firstWhere(
+        (s) => s.step == RecoveryStep.email,
+      );
+
+      expect(state.email, isNull);
+      expect(state.failure, isNull);
+      await bloc.close();
+    });
   });
 }

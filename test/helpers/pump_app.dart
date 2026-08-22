@@ -2,10 +2,12 @@ import 'package:clinicore_flutter/core/di/injection.dart';
 import 'package:clinicore_flutter/core/theme/theme.dart';
 import 'package:clinicore_flutter/features/auth/domain/repositories/auth_repository.dart';
 import 'package:clinicore_flutter/features/auth/domain/usecases/login_usecases.dart';
+import 'package:clinicore_flutter/features/auth/domain/usecases/password_reset_usecases.dart';
 import 'package:clinicore_flutter/features/auth/domain/usecases/registration_usecases.dart';
 import 'package:clinicore_flutter/features/auth/domain/usecases/session_usecases.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/auth/auth_bloc.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/login/login_bloc.dart';
+import 'package:clinicore_flutter/features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/registration/registration_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -39,6 +41,9 @@ FakeAuthRepository setUpAuthDependencies() {
   sl.registerLazySingleton(() => CompleteRegistration(sl()));
   sl.registerLazySingleton(() => RestoreSession(sl()));
   sl.registerLazySingleton(() => SignOut(sl()));
+  sl.registerLazySingleton(() => InitPasswordRecovery(sl()));
+  sl.registerLazySingleton(() => VerifyRecoveryOtp(sl()));
+  sl.registerLazySingleton(() => ChangePassword(sl()));
 
   sl.registerFactory<LoginBloc>(
     () => LoginBloc(
@@ -49,6 +54,13 @@ FakeAuthRepository setUpAuthDependencies() {
   );
   sl.registerFactory<RegistrationBloc>(
     () => RegistrationBloc(initRegistration: sl(), completeRegistration: sl()),
+  );
+  sl.registerFactory<RecoveryBloc>(
+    () => RecoveryBloc(
+      initPasswordRecovery: sl(),
+      verifyRecoveryOtp: sl(),
+      changePassword: sl(),
+    ),
   );
 
   return repository;

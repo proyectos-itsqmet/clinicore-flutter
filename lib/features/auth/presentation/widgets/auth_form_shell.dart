@@ -20,15 +20,18 @@ import '../../../../shared/ui/organisms/organisms.dart';
 class AuthFormShell extends StatelessWidget {
   const AuthFormShell({
     super.key,
-    required this.title,
     required this.children,
+    this.title,
     this.kicker,
     this.subtitle,
     this.footer,
     this.onBack,
   });
 
-  final String title;
+  /// All three are optional — see [AppAuthHero]. A screen that supplies none
+  /// gets the brand row alone, which is what login does: the form's own field
+  /// labels already say what the screen is for.
+  final String? title;
   final String? kicker;
   final String? subtitle;
 
@@ -48,6 +51,19 @@ class AuthFormShell extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.field,
       body: Column(
+        // NOT the default `center`. `center` hands its children LOOSE
+        // cross-axis constraints, and [AppAuthHero] has no intrinsic width of
+        // its own — its `AnimatedSize` wraps a `Column(mainAxisSize: min)`, so
+        // given room to shrink it sizes to its widest line of text. The result
+        // is a navy header narrower than the screen, with the page ground
+        // showing down both sides.
+        //
+        // It went unnoticed because a long `h1` made the header look almost
+        // full width; the moment a screen has only a short subtitle the header
+        // visibly collapses. `stretch` makes the width tight, which is what
+        // the header always wanted — the `AnimatedSize` is there to animate
+        // HEIGHT for the keyboard collapse, never width.
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           AppAuthHero(
             title: title,

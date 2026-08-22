@@ -152,24 +152,55 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Either<Failure, Unit>> requestPasswordReset({
+  Future<Either<Failure, Unit>> initPasswordRecovery({
     required String email,
   }) async {
-    // Not a `_guard` call: the remote data source throws a generic
-    // BadRequestException for this, and mapping it through `_mapException`
-    // would produce "no pudimos procesar la solicitud" — technically true and
-    // completely unhelpful. The user needs to know the feature does not exist
-    // yet and what to do instead.
-    return const Left<Failure, Unit>(NotImplementedOnServerFailure());
+    return _guard(() async {
+      final String flashToken = await remote.initPasswordRecovery(email: email);
+
+      // Stored WITHOUT a profile, exactly like the registration flash token:
+      // `readSession` returns null unless both halves are present, so a
+      // half-finished recovery can never masquerade as a signed-in user.
+      await local.saveTokenOnly(flashToken);
+
+      return unit;
+    });
   }
 
   @override
-  Future<Either<Failure, Unit>> confirmPasswordReset({
-    required String email,
-    required String otp,
-    required String newPassword,
+  Future<Either<Failure, Unit>> verifyRecoveryOtp({required String otp}) async {
+    return _guard(() async {
+      final String changeToken = await remote.verifyRecoveryOtp(otp: otp);
+
+      // Overwrites step 1's token with step 2's. That is the intent: the
+      // OTP_PENDING token has done its job and the CHANGE_PASSWORD one is
+      // what step 3 needs, so keeping both would only leave the interceptor a
+      // choice it has no way to make.
+      await local.saveTokenOnly(changeToken);
+
+      return unit;
+    });
+  }
+
+  @override
+  Future<Either<Failure, Unit>> changePassword({
+    required String password,
+    required String repeatedPassword,
   }) async {
-    return const Left<Failure, Unit>(NotImplementedOnServerFailure());
+    return _guard(() async {
+      await remote.changePassword(
+        password: password,
+        repeatedPassword: repeatedPassword,
+      );
+
+      // The change token is spent, and the server has already dropped its
+      // cookie. Clearing locally too means the device holds nothing that
+      // points at the old password — the patient signs in fresh, which is
+      // also the only real proof the new one was stored.
+      await local.clear();
+
+      return unit;
+    });
   }
 
   /// Runs [body] and turns anything it throws into a [Failure].

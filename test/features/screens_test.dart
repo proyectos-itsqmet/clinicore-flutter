@@ -142,7 +142,13 @@ void main() {
     ) async {
       await pumpApp(tester, const LoginScreen());
 
-      expect(find.text('Entra a tu clinica.'), findsOneWidget);
+      // Login's hero is deliberately just the brand row and the tagline: the
+      // kicker and the `h1` were removed, and `AuthFormShell.title` is nullable
+      // precisely so this screen can omit it.
+      expect(
+        find.text('Tus citas y tus recetas en un solo lugar.'),
+        findsOneWidget,
+      );
       expect(find.text('CORREO O CEDULA'), findsOneWidget);
       expect(find.text('CONTRASENA'), findsOneWidget);
       expect(find.text('Ingresar'), findsOneWidget);

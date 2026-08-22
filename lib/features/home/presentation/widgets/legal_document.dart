@@ -24,35 +24,47 @@ class LegalClause {
 /// make it harder to read straight through, which is the only way anyone ever
 /// reads one of these.
 ///
-/// The banner at the top exists because of what it says. **The clause text
-/// these screens ship with is structural placeholder copy.** It describes the
-/// shape a Terms document and a Privacy Policy need, in the right order, with
-/// the right headings — but it is NOT legal text and must be replaced by the
-/// clinic's own counsel before release. Shipping invented terms for a health
-/// application is not a cosmetic problem: in Ecuador a health provider is
-/// bound by the Ley Organica de Proteccion de Datos Personales, and consent
-/// collected against text nobody authorised is not consent.
+/// ## The copy is still placeholder, and hiding the banner did not change that
 ///
-/// The banner is deliberately hard to miss and deliberately easy to delete —
-/// pass `showDraftNotice: false` once the real text is in.
+/// **The clause text these screens ship with is structural placeholder copy.**
+/// It describes the shape a Terms document and a Privacy Policy need, in the
+/// right order, with the right headings — but it is NOT legal text and must be
+/// replaced by the clinic's own counsel before release. Shipping invented terms
+/// for a health application is not a cosmetic problem: in Ecuador a health
+/// provider is bound by the Ley Organica de Proteccion de Datos Personales, and
+/// consent collected against text nobody authorised is not consent.
+///
+/// [showDraftNotice] renders an on-screen warning saying exactly that. It
+/// defaults to **false** so the screens read cleanly in demos; pass `true`
+/// while the copy is under review, and note that the risk above is unchanged
+/// either way — the flag controls whether the app admits it, not whether it is
+/// true.
 class LegalDocument extends StatelessWidget {
   const LegalDocument({
     super.key,
     required this.title,
-    required this.lastUpdated,
     required this.intro,
     required this.clauses,
-    this.showDraftNotice = true,
+    this.lastUpdated,
+    this.showDraftNotice = false,
   });
 
   final String title;
 
-  /// Shown as a pill under the heading. A legal document with no date is
-  /// unciteable.
-  final String lastUpdated;
+  /// Shown as a pill under the heading when present. A published legal
+  /// document with no date is unciteable, so fill this in with the date the
+  /// clinic's counsel approves the text.
+  ///
+  /// Null rather than a `'[FECHA]'` placeholder: a pill reading
+  /// "Actualizado: [FECHA]" looks like a rendering bug to a patient, and it
+  /// makes the screen look broken instead of unfinished. No pill is honest.
+  final String? lastUpdated;
 
   final String intro;
   final List<LegalClause> clauses;
+
+  /// Off by default. See the class note: turning it ON is the useful direction
+  /// while the copy is being reviewed.
   final bool showDraftNotice;
 
   @override
@@ -70,14 +82,15 @@ class LegalDocument extends StatelessWidget {
           const SizedBox(height: AppSpacing.section),
 
           Text(title, style: AppTypography.h2),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: AppPill(
-              label: 'Actualizado: $lastUpdated',
-              tone: AppPillTone.plain,
-              dense: true,
+          if (lastUpdated != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppPill(
+                label: 'Actualizado: $lastUpdated',
+                tone: AppPillTone.plain,
+                dense: true,
+              ),
             ),
-          ),
           Text(intro, style: AppTypography.lead),
 
           if (showDraftNotice) const _DraftNotice(),

@@ -68,20 +68,34 @@ abstract interface class AuthRepository {
   /// already there, so the worst case of a compromised device is unchanged.
   Future<Either<Failure, AuthSession>> unlockWithBiometrics();
 
-  /// Asks the server to start a password reset.
+  /// Recovery step 1: asks the server to mail a code.
   ///
-  /// **Not implemented on the server.** See [ApiEndpoints.forgotPassword] —
-  /// the QMS backend has no password recovery at all. This returns
-  /// [NotImplementedOnServerFailure] until it does, which is why the screen
-  /// can say something true instead of pretending a mail was sent.
-  Future<Either<Failure, Unit>> requestPasswordReset({required String email});
+  /// Succeeding stores a 5-minute token that step 2 needs, so
+  /// [verifyRecoveryOtp] has to happen inside that window. The server accepts
+  /// the address of a patient, a doctor OR an operator.
+  ///
+  /// A 404 here means the address is not registered — worth surfacing plainly
+  /// rather than hiding, because the alternative is a patient waiting for a
+  /// mail that was never going to arrive.
+  Future<Either<Failure, Unit>> initPasswordRecovery({required String email});
 
-  /// Completes a password reset with the emailed code.
+  /// Recovery step 2: the code from the mail.
   ///
-  /// **Not implemented on the server.** See [requestPasswordReset].
-  Future<Either<Failure, Unit>> confirmPasswordReset({
-    required String email,
-    required String otp,
-    required String newPassword,
+  /// The email is not a parameter: the server reads it from step 1's token.
+  /// Succeeding swaps that token for a 10-minute one that authorises the
+  /// change itself.
+  ///
+  /// **Three wrong codes block it** (`OtpData.excedioIntentos`), and the block
+  /// is per address, so retrying means going back to step 1.
+  Future<Either<Failure, Unit>> verifyRecoveryOtp({required String otp});
+
+  /// Recovery step 3: the new password.
+  ///
+  /// Sends the repeat too, because the server is what compares them. On
+  /// success the token is cleared from the device: the patient signs in again
+  /// with the new password, which also proves it was stored.
+  Future<Either<Failure, Unit>> changePassword({
+    required String password,
+    required String repeatedPassword,
   });
 }

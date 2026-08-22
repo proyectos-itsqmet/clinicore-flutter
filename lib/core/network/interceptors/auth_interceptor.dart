@@ -55,12 +55,15 @@ class AuthInterceptor extends Interceptor {
   /// `JwtValidator` reject the request with 401 before `AuthController` ever
   /// runs, so a user whose session expired could never log back in. That is a
   /// genuinely nasty lockout, and it is caused by being helpful with headers.
+  /// Note what is NOT here: the two later password-recovery steps.
+  /// `recover-password/verify-otp` and `recover-password/change` are the
+  /// opposite case — they REQUIRE the flash token issued by the step before
+  /// them, so they must go out with credentials attached.
   static const Set<String> _anonymousPaths = <String>{
     '/auth/mobile/login-patient',
     '/auth/login-patient',
     '/auth/init-registration-patient',
-    '/auth/forgot-password',
-    '/auth/reset-password',
+    '/auth/recover-password/init',
   };
 
   @override

@@ -20,7 +20,6 @@ class PrivacyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const LegalDocument(
       title: 'Politica de privacidad',
-      lastUpdated: '[FECHA]',
       intro:
           'Como [NOMBRE DE LA CLINICA] trata tus datos personales y tus datos '
           'de salud cuando usas esta aplicacion.',

@@ -91,9 +91,7 @@ class _LoginViewState extends State<_LoginView> {
       },
       builder: (context, state) {
         return AuthFormShell(
-          kicker: 'Turnos en linea',
-          title: 'Entra a tu clinica.',
-          subtitle: 'Tus citas, tu historia y tus recetas en un solo lugar.',
+          subtitle: 'Tus citas y tus recetas en un solo lugar.',
           footer: AuthFooterLink(
             message: 'No tienes cuenta?',
             actionLabel: 'Crea una',

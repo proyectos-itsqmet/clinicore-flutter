@@ -7,7 +7,11 @@ class PathName {
 
   //! Auth
   static const loginScreen = 'login';
+
+  //! Password recovery
   static const forgotPasswordScreen = 'recuperar-contrasena';
+  static const recoveryCodeScreen = 'recuperar-codigo';
+  static const recoveryPasswordScreen = 'recuperar-nueva';
 
   //! Registration
   static const registerScreen = 'registro';

@@ -35,6 +35,15 @@ class FakeAuthRepository implements AuthRepository {
   Either<Failure, bool> canUnlockResult = const Right<Failure, bool>(false);
   Either<Failure, AuthSession> unlockResult = Right(testSession);
 
+  // Password recovery, one per step. Default to success so a test only scripts
+  // the step it is actually about.
+  Either<Failure, Unit> initPasswordRecoveryResult =
+      const Right<Failure, Unit>(unit);
+  Either<Failure, Unit> verifyRecoveryOtpResult = const Right<Failure, Unit>(
+    unit,
+  );
+  Either<Failure, Unit> changePasswordResult = const Right<Failure, Unit>(unit);
+
   // ---- recorded calls ----
 
   String? lastLoginEmail;
@@ -45,6 +54,15 @@ class FakeAuthRepository implements AuthRepository {
   PatientRegistration? lastRegistration;
   int signOutCount = 0;
   int initRegistrationCount = 0;
+
+  String? lastRecoveryEmail;
+  String? lastRecoveryOtp;
+  String? lastNewPassword;
+  String? lastRepeatedPassword;
+
+  /// Counts resends: step 1 is called again to refresh the 300-second token,
+  /// so a test can assert that "Reenviar codigo" really re-ran it.
+  int initPasswordRecoveryCount = 0;
 
   /// A session every test can share. Nothing mutates it.
   static final AuthSession testSession = AuthSession(
@@ -107,14 +125,27 @@ class FakeAuthRepository implements AuthRepository {
       unlockResult;
 
   @override
-  Future<Either<Failure, Unit>> requestPasswordReset({
+  Future<Either<Failure, Unit>> initPasswordRecovery({
     required String email,
-  }) async => const Left<Failure, Unit>(NotImplementedOnServerFailure());
+  }) async {
+    lastRecoveryEmail = email;
+    initPasswordRecoveryCount++;
+    return initPasswordRecoveryResult;
+  }
 
   @override
-  Future<Either<Failure, Unit>> confirmPasswordReset({
-    required String email,
-    required String otp,
-    required String newPassword,
-  }) async => const Left<Failure, Unit>(NotImplementedOnServerFailure());
+  Future<Either<Failure, Unit>> verifyRecoveryOtp({required String otp}) async {
+    lastRecoveryOtp = otp;
+    return verifyRecoveryOtpResult;
+  }
+
+  @override
+  Future<Either<Failure, Unit>> changePassword({
+    required String password,
+    required String repeatedPassword,
+  }) async {
+    lastNewPassword = password;
+    lastRepeatedPassword = repeatedPassword;
+    return changePasswordResult;
+  }
 }

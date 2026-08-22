@@ -14,6 +14,7 @@ import '../../features/auth/domain/usecases/registration_usecases.dart';
 import '../../features/auth/domain/usecases/session_usecases.dart';
 import '../../features/auth/presentation/blocs/auth/auth_bloc.dart';
 import '../../features/auth/presentation/blocs/login/login_bloc.dart';
+import '../../features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import '../../features/auth/presentation/blocs/registration/registration_bloc.dart';
 import '../network/dio_client.dart';
 import '../network/token_store.dart';
@@ -87,10 +88,10 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => RestoreSession(sl()));
   sl.registerLazySingleton(() => SignOut(sl()));
 
-  // Registered even though the endpoints do not exist yet — see
-  // `password_reset_usecases.dart`. They cost nothing until called.
-  sl.registerLazySingleton(() => RequestPasswordReset(sl()));
-  sl.registerLazySingleton(() => ConfirmPasswordReset(sl()));
+  // Password recovery — the three steps now exist on the server.
+  sl.registerLazySingleton(() => InitPasswordRecovery(sl()));
+  sl.registerLazySingleton(() => VerifyRecoveryOtp(sl()));
+  sl.registerLazySingleton(() => ChangePassword(sl()));
 
   // ==========================================================
   // AUTH — presentation
@@ -112,5 +113,16 @@ Future<void> configureDependencies() async {
 
   sl.registerFactory<RegistrationBloc>(
     () => RegistrationBloc(initRegistration: sl(), completeRegistration: sl()),
+  );
+
+  // A factory, like the other flow blocs: a recovery that was abandoned
+  // halfway must not resume with a dead flash token the next time someone taps
+  // "Olvidaste tu contrasena?".
+  sl.registerFactory<RecoveryBloc>(
+    () => RecoveryBloc(
+      initPasswordRecovery: sl(),
+      verifyRecoveryOtp: sl(),
+      changePassword: sl(),
+    ),
   );
 }

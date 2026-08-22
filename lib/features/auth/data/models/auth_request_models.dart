@@ -41,6 +41,54 @@ class InitRegistrationRequestModel {
   };
 }
 
+/// `com.devluis.types.RecoverPasswordInitBody` — recovery step 1.
+///
+/// One field, and the server validates it with `@NotBlank` + `@Email` before
+/// looking it up across patients, doctors and operators.
+class RecoverPasswordInitRequestModel {
+  const RecoverPasswordInitRequestModel({required this.email});
+
+  final String email;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{'email': email};
+}
+
+/// `com.devluis.types.VerifyOtpBody` — recovery step 2.
+///
+/// The email is deliberately absent: `AuthController.verifyRecoveryOtp` reads
+/// it from `auth.getName()` on the step-1 token. Sending it in the body would
+/// invite the two to disagree.
+class VerifyRecoveryOtpRequestModel {
+  const VerifyRecoveryOtpRequestModel({required this.otp});
+
+  final String otp;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{'otp': otp};
+}
+
+/// `com.devluis.types.ChangePasswordBody` — recovery step 3.
+///
+/// `repeatedPassword` is sent because the SERVER compares them and answers
+/// "Las contraseñas no coinciden" itself. The form's own confirm-field check
+/// catches it earlier and more kindly, but this is the check that counts.
+class ChangePasswordRequestModel {
+  const ChangePasswordRequestModel({
+    required this.password,
+    required this.repeatedPassword,
+  });
+
+  final String password;
+  final String repeatedPassword;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+    'password': password,
+    'repeatedPassword': repeatedPassword,
+  };
+
+  @override
+  String toString() => 'ChangePasswordRequestModel(<redacted>)';
+}
+
 /// `com.devluis.dto.PatientDTO`.
 ///
 /// Two mapping details that are easy to get wrong and hard to debug:

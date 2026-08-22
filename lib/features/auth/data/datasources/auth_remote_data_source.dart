@@ -22,16 +22,22 @@ class RemoteAuthResult {
 /// This is the single most surprising thing about this API, and it is not a
 /// mistake in the client:
 ///
-/// | endpoint                        | where the token is |
-/// |---------------------------------|--------------------|
-/// | `mobile/login-patient`          | `Authorization` response header |
-/// | `init-registration-patient`     | `Set-Cookie: jwt=...` (300s) |
-/// | `register-patient`              | `Set-Cookie: jwt=...` (24h) |
+/// | endpoint                         | where the token is |
+/// |----------------------------------|--------------------|
+/// | `mobile/login-patient`           | `Authorization` response header |
+/// | `init-registration-patient`      | `Set-Cookie: jwt=...` (300s) |
+/// | `register-patient`               | `Set-Cookie: jwt=...` (24h) |
+/// | `recover-password/init`          | `Set-Cookie: jwt=...` (300s) |
+/// | `recover-password/verify-otp`    | `Set-Cookie: jwt=...` (600s) |
 ///
-/// Only login got a `/mobile/` variant. The two registration steps were
-/// written for the Angular app, where the browser stores the cookie
-/// invisibly — so a native client has to read `Set-Cookie` by hand. That is
-/// what [_tokenFromSetCookie] is for, and why it is not optional.
+/// **Only login got a `/mobile/` variant.** Everything else was written for the
+/// Angular app, where the browser stores the cookie invisibly — so a native
+/// client has to read `Set-Cookie` by hand. That is what [_tokenFromSetCookie]
+/// is for, and why it is not optional.
+///
+/// Sending those tokens BACK is the mirror image of the same problem, and it is
+/// solved in `AuthInterceptor`: `JwtValidator.recoverToken` reads the `jwt`
+/// cookie and never looks at `Authorization`, so the interceptor sends both.
 abstract interface class AuthRemoteDataSource {
   Future<RemoteAuthResult> loginPatient({
     String? email,
@@ -49,12 +55,19 @@ abstract interface class AuthRemoteDataSource {
     PatientRegistration registration,
   );
 
-  Future<void> requestPasswordReset({required String email});
+  /// Recovery step 1. Returns the 300-second `ROLE_OTP_PENDING` token that
+  /// [verifyRecoveryOtp] authenticates with.
+  Future<String> initPasswordRecovery({required String email});
 
-  Future<void> confirmPasswordReset({
-    required String email,
-    required String otp,
-    required String newPassword,
+  /// Recovery step 2. Returns the 600-second `ROLE_CHANGE_PASSWORD` token that
+  /// [changePassword] authenticates with.
+  Future<String> verifyRecoveryOtp({required String otp});
+
+  /// Recovery step 3. Nothing to return: the server clears the cookie and the
+  /// patient signs in again with the new password.
+  Future<void> changePassword({
+    required String password,
+    required String repeatedPassword,
   });
 }
 
@@ -151,25 +164,66 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   @override
-  Future<void> requestPasswordReset({required String email}) {
-    // See ApiEndpoints.forgotPassword: the route does not exist. Throwing here
-    // instead of firing a request that would 404 keeps the reason legible.
-    throw const BadRequestException(
-      message: 'Password recovery is not implemented on the QMS backend.',
-      statusCode: 501,
-    );
+  Future<String> initPasswordRecovery({required String email}) async {
+    try {
+      final Response<dynamic> response = await _dio.post<dynamic>(
+        ApiEndpoints.recoverPasswordInit,
+        data: RecoverPasswordInitRequestModel(email: email).toJson(),
+      );
+
+      final String? token = _tokenFromSetCookie(response);
+      if (token == null) {
+        // A 200 with no cookie means the code was mailed but the client has no
+        // way to prove step 1 happened, so step 2 would 401. Failing here says
+        // that; carrying on would strand the patient on the code screen.
+        throw const ServerException(
+          message: 'No pudimos iniciar la recuperacion. Intenta de nuevo.',
+          data: 'missing jwt cookie on recover-password/init',
+        );
+      }
+      return token;
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
   }
 
   @override
-  Future<void> confirmPasswordReset({
-    required String email,
-    required String otp,
-    required String newPassword,
-  }) {
-    throw const BadRequestException(
-      message: 'Password recovery is not implemented on the QMS backend.',
-      statusCode: 501,
-    );
+  Future<String> verifyRecoveryOtp({required String otp}) async {
+    try {
+      final Response<dynamic> response = await _dio.post<dynamic>(
+        ApiEndpoints.recoverPasswordVerifyOtp,
+        data: VerifyRecoveryOtpRequestModel(otp: otp).toJson(),
+      );
+
+      final String? token = _tokenFromSetCookie(response);
+      if (token == null) {
+        throw const ServerException(
+          message: 'No pudimos verificar el codigo. Intenta de nuevo.',
+          data: 'missing jwt cookie on recover-password/verify-otp',
+        );
+      }
+      return token;
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
+  }
+
+  @override
+  Future<void> changePassword({
+    required String password,
+    required String repeatedPassword,
+  }) async {
+    try {
+      await _dio.post<dynamic>(
+        ApiEndpoints.recoverPasswordChange,
+        data: ChangePasswordRequestModel(
+          password: password,
+          repeatedPassword: repeatedPassword,
+        ).toJson(),
+      );
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
   }
 
   /// `Authorization: Bearer <token>` on the RESPONSE, which is how

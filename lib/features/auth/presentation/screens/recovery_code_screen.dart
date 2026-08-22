@@ -9,45 +9,36 @@ import '../../../../core/routes/app_path.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/helpers/validators.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
-import '../blocs/registration/registration_bloc.dart';
+import '../blocs/recovery/recovery_bloc.dart';
 import '../widgets/auth_form_shell.dart';
 import '../widgets/otp_field.dart';
-import '../widgets/registration_flow_listeners.dart';
+import '../widgets/recovery_flow_listeners.dart';
 
-/// Step 2 of 3 — the code from the email.
+/// Step 2 of 3 — the code from the mail.
 ///
-/// ## Read this before trusting the code
+/// ## This one is actually verified
 ///
-/// **The server does not check it.** `AuthService.initRegistration` generates
-/// a code and mails it, but never calls `OtpService.saveOtp`, so the store it
-/// would be compared against is always empty — and nothing anywhere calls
-/// `OtpService.validate`, because there is no route that would. The flash token
-/// issued alongside the mail is, on its own, enough to complete registration.
+/// Worth stating because the app has a second OTP screen that is not:
+/// registration's code is decorative, since `AuthService.initRegistration`
+/// never calls `otpService.saveOtp`. Recovery's DOES
+/// (`initPasswordRecovery`, AuthService:234), so `validate` has something to
+/// compare against and a wrong code is a real rejection.
 ///
-/// So this screen validates the SHAPE of the code (six digits) and advances.
-/// It does not claim to have verified anything.
+/// ## Three tries, and then the code is dead
 ///
-/// The on-screen notice that used to say so was removed on request, which
-/// makes this comment the only remaining record — so keep it. Whoever wires
-/// the real verification needs THREE things, not one: the route
-/// `/auth/verify-otp` has to exist, `AuthService.initRegistration` has to
-/// actually call `OtpService.saveOtp` (today it never does, so `otpStore` is
-/// permanently empty and `validate` would return false for every code), and
-/// `RegistrationBloc._onCodeSubmitted` has to call it instead of advancing
-/// locally.
-///
-/// The step is kept, rather than skipped, for two reasons. The resend action
-/// refreshes the 5-minute token, which a patient who paused genuinely needs.
-/// And when the verification endpoint lands, this is the handler that calls it:
-/// `RegistrationCodeSubmitted` already carries the code into the bloc.
-class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key});
+/// `OtpData.excedioIntentos()` blocks at 3 failures, and the block lives with
+/// the stored code — so retrying on this screen cannot clear it. The only way
+/// out is a NEW code, which is why "Reenviar codigo" is a recovery path here
+/// and not a convenience. The screen says so after the first failure rather
+/// than letting someone burn all three tries without knowing the budget.
+class RecoveryCodeScreen extends StatefulWidget {
+  const RecoveryCodeScreen({super.key});
 
   @override
-  State<OtpScreen> createState() => _OtpScreenState();
+  State<RecoveryCodeScreen> createState() => _RecoveryCodeScreenState();
 }
 
-class _OtpScreenState extends State<OtpScreen> {
+class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
   final TextEditingController _code = TextEditingController();
 
   /// Long enough to stop someone using the clinic's mail server as a weapon,
@@ -57,6 +48,10 @@ class _OtpScreenState extends State<OtpScreen> {
   Timer? _timer;
   int _secondsLeft = _resendSeconds;
   String? _error;
+
+  /// Counted locally, only to decide when to warn about the limit. The server
+  /// owns the real count — this is a hint, never the gate.
+  int _attempts = 0;
 
   @override
   void initState() {
@@ -89,21 +84,38 @@ class _OtpScreenState extends State<OtpScreen> {
     setState(() => _error = problem);
     if (problem != null) return;
 
-    context.read<RegistrationBloc>().add(RegistrationCodeSubmitted(_code.text));
+    context.read<RecoveryBloc>().add(RecoveryCodeSubmitted(_code.text));
+  }
+
+  void _resend() {
+    setState(() {
+      _attempts = 0;
+      _error = null;
+      _code.clear();
+    });
+    _startCountdown();
+    context.read<RecoveryBloc>().add(const RecoveryCodeResendRequested());
   }
 
   @override
   Widget build(BuildContext context) {
-    return RegistrationFlowListeners(
-      onStepChanged: (BuildContext context, RegistrationState state) {
-        if (state.step == RegistrationStep.profile) {
-          context.push(AppPath.registerProfileScreen);
+    return RecoveryFlowListeners(
+      onStepChanged: (BuildContext context, RecoveryState state) {
+        if (state.step == RecoveryStep.password) {
+          context.push(AppPath.recoveryPasswordScreen);
           return;
         }
-        // The 300-second token expired and the bloc walked the flow back.
-        if (state.step == RegistrationStep.identity) context.pop();
+        // The 5-minute token died and the bloc walked the flow back to step 1.
+        if (state.step == RecoveryStep.email) context.pop();
       },
-      child: BlocBuilder<RegistrationBloc, RegistrationState>(
+      child: BlocConsumer<RecoveryBloc, RecoveryState>(
+        // The snackbar is [RecoveryFlowListeners]' job; this one only keeps the
+        // local attempt counter, which is why it watches `status` and touches
+        // no navigation.
+        listenWhen: (previous, current) =>
+            previous.status != current.status &&
+            current.status == RecoveryStatus.failure,
+        listener: (context, state) => setState(() => _attempts++),
         builder: (context, state) {
         final String target = state.email ?? 'tu correo';
 
@@ -135,8 +147,30 @@ class _OtpScreenState extends State<OtpScreen> {
               ],
             ),
 
+            // Only after a real rejection. Announcing "you have 3 tries" to
+            // someone who has not failed yet is pressure, not help.
+            if (_attempts > 0)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: AppSpacing.md,
+                children: <Widget>[
+                  const Icon(
+                    AppIcons.warning,
+                    size: 16,
+                    color: AppColors.goldDeep,
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Despues de 3 intentos fallidos el codigo se bloquea y '
+                      'hay que pedir uno nuevo.',
+                      style: AppTypography.cap,
+                    ),
+                  ),
+                ],
+              ),
+
             AppButton(
-              label: 'Continuar',
+              label: 'Verificar codigo',
               size: AppButtonSize.lg,
               fullWidth: true,
               isLoading: state.isSubmitting,
@@ -146,8 +180,6 @@ class _OtpScreenState extends State<OtpScreen> {
 
             Center(
               child: _secondsLeft > 0
-                  // While the countdown runs this is a status, not a control —
-                  // which is exactly what a pill is for.
                   ? AppPill(
                       label: 'Puedes reenviar en ${_secondsLeft}s',
                       tone: AppPillTone.plain,
@@ -156,14 +188,7 @@ class _OtpScreenState extends State<OtpScreen> {
                   : AppButton(
                       label: 'Reenviar codigo',
                       variant: AppButtonVariant.ghost,
-                      onPressed: state.isSubmitting
-                          ? null
-                          : () {
-                              _startCountdown();
-                              context.read<RegistrationBloc>().add(
-                                const RegistrationCodeResendRequested(),
-                              );
-                            },
+                      onPressed: state.isSubmitting ? null : _resend,
                     ),
             ),
             ],
@@ -173,4 +198,3 @@ class _OtpScreenState extends State<OtpScreen> {
     );
   }
 }
-

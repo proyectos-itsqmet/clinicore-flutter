@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/constant/app_icons.dart';
+import '../../../../core/routes/app_path.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/helpers/validators.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
@@ -12,6 +13,7 @@ import '../../domain/entities/patient_registration.dart';
 import '../blocs/auth/auth_bloc.dart';
 import '../blocs/registration/registration_bloc.dart';
 import '../widgets/auth_form_shell.dart';
+import '../widgets/registration_flow_listeners.dart';
 
 /// Step 3 of 3 — the rest of the patient record, and the call that creates it.
 ///
@@ -48,7 +50,12 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
 
   DateTime? _birthday;
   Gender? _gender;
+
+  // Both fields live OUTSIDE the `Form` — one is a date picker, the other a
+  // chip row — so `Form.validate()` cannot see them and the screen has to
+  // check them itself. These two flags are that check's output.
   bool _birthdayMissing = false;
+  bool _genderMissing = false;
 
   @override
   void dispose() {
@@ -90,8 +97,16 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
 
   void _submit() {
     final bool formOk = _formKey.currentState?.validate() ?? false;
-    setState(() => _birthdayMissing = _birthday == null);
-    if (!formOk || _birthday == null) return;
+
+    // Every check runs before the early return, so a patient missing both the
+    // date and the sex sees both errors at once instead of discovering the
+    // second one only after fixing the first.
+    setState(() {
+      _birthdayMissing = _birthday == null;
+      _genderMissing = _gender == null;
+    });
+
+    if (!formOk || _birthday == null || _gender == null) return;
 
     context.read<RegistrationBloc>().add(
       RegistrationProfileSubmitted(
@@ -108,6 +123,68 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
     );
   }
 
+  /// Guards both ways out of step 3: the header's back arrow and the device's
+  /// own back gesture.
+  ///
+  /// Leaving is not a normal `pop` here. The flash token, the email and the
+  /// cedula all live in [RegistrationBloc], and step 3 is the only step whose
+  /// work — a whole profile form — is lost by going back. So it asks first,
+  /// and on confirmation it RESTARTS the flow rather than popping one screen:
+  /// the OTP screen underneath is tied to a token that will not be reused, so
+  /// returning to it would show a step that cannot be completed.
+  Future<void> _confirmLeave() async {
+    final bool leave =
+        await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: Text('Salir del registro?', style: AppTypography.h3),
+            content: Text(
+              'Vas a perder los datos que ya escribiste y tendras que '
+              'empezar de nuevo desde tu correo y cedula.',
+              style: AppTypography.body,
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(
+                  'Seguir aqui',
+                  style: AppTypography.cap.copyWith(
+                    color: AppColors.ink2,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(
+                  'Salir y empezar de nuevo',
+                  style: AppTypography.cap.copyWith(
+                    color: AppColors.emergency,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!leave || !mounted) return;
+
+    // Reset BEFORE navigating. Step 1's listener only pushes forward when the
+    // step is `verification`, so clearing to `identity` first guarantees the
+    // flow cannot bounce straight back out to where we came from.
+    //
+    // The `go` below is deliberately redundant: resetting to `identity` also
+    // trips this screen's own listener, which navigates to the same place. Two
+    // `go` calls to one location are idempotent, and keeping the explicit one
+    // means back-navigation does not silently break the day that listener
+    // branch is refactored.
+    context.read<RegistrationBloc>().add(const RegistrationRestarted());
+    context.go(AppPath.registerScreen);
+  }
+
   String? _text(TextEditingController controller) {
     final String value = controller.text.trim();
     return value.isEmpty ? null : value;
@@ -115,10 +192,8 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<RegistrationBloc, RegistrationState>(
-      listenWhen: (previous, current) =>
-          previous.step != current.step || previous.status != current.status,
-      listener: (context, state) {
+    return RegistrationFlowListeners(
+      onStepChanged: (BuildContext context, RegistrationState state) {
         // Registered and signed in. Hand the session up; the router navigates.
         final session = state.session;
         if (state.step == RegistrationStep.done && session != null) {
@@ -127,31 +202,39 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
         }
 
         // The five-minute token expired. The bloc already walked the flow back
-        // to step 1; this unwinds the navigation to match.
+        // to step 1; this unwinds the navigation to match. Straight to the
+        // first step rather than popping twice: the OTP screen underneath is
+        // also stale.
         if (state.step == RegistrationStep.identity) {
-          context.go(
-            // Straight to the first step rather than popping twice: the OTP
-            // screen underneath is also stale.
-            '/registro',
-          );
-        }
-
-        final failure = state.failure;
-        if (state.status == RegistrationStatus.failure && failure != null) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text(failure.message)));
-          context.read<RegistrationBloc>().add(
-            const RegistrationFailureDismissed(),
-          );
+          context.go(AppPath.registerScreen);
         }
       },
-      builder: (context, state) {
-        return AuthFormShell(
+      child: BlocBuilder<RegistrationBloc, RegistrationState>(
+        builder: (context, state) {
+        // `done` is included on purpose, and it is the fix for the blank form.
+        //
+        // On success this screen hands the session to [AuthBloc], AuthBloc
+        // refreshes the router, and the router rebuilds this subtree before the
+        // redirect swaps the screen out. A rebuilt State means fresh, empty
+        // `TextEditingController`s, so the patient watched their finished form
+        // wipe itself and sat in front of a blank one until navigation caught
+        // up. Covering `submitting` AND `done` means the form is off screen for
+        // that whole window and the wipe is never visible.
+        final bool busy =
+            state.isSubmitting || state.step == RegistrationStep.done;
+
+        if (busy) {
+          // `canPop: false` with no handler: mid-request there is nothing to
+          // confirm and nothing to go back to — leaving now would abandon a
+          // patient record the server may already have created.
+          return const PopScope(canPop: false, child: _CreatingAccount());
+        }
+
+        final Widget form = AuthFormShell(
           kicker: 'Paso 3 de 3',
           title: 'Cuentanos quien eres.',
           subtitle: 'Con esto queda lista tu historia clinica.',
-          onBack: () => context.pop(),
+          onBack: _confirmLeave,
           children: <Widget>[
             Form(
               key: _formKey,
@@ -191,8 +274,12 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
 
                   _GenderField(
                     value: _gender,
+                    showError: _genderMissing,
                     enabled: !state.isSubmitting,
-                    onChanged: (value) => setState(() => _gender = value),
+                    onChanged: (value) => setState(() {
+                      _gender = value;
+                      _genderMissing = false;
+                    }),
                   ),
 
                   AppTextField(
@@ -286,7 +373,62 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
             ),
           ],
         );
-      },
+
+        // The device's own back gesture gets the SAME confirmation as the
+        // header arrow. Guarding only the arrow is the usual mistake: on
+        // Android the system gesture is how most people go back, so it is the
+        // path that would silently discard the form.
+        return PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (bool didPop, Object? result) {
+              if (didPop) return;
+              _confirmLeave();
+            },
+            child: form,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// What step 3 shows while the account is being created.
+///
+/// A full screen rather than a spinner inside the button, because the button
+/// is not the thing that needs covering: the form behind it blanks out when
+/// the router rebuilds this subtree on success. See the `busy` note in
+/// [RegisterProfileScreen].
+class _CreatingAccount extends StatelessWidget {
+  const _CreatingAccount();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.field,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          spacing: AppSpacing.xxl,
+          children: <Widget>[
+            const AppBrandMark(size: 44),
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                color: AppColors.blue,
+              ),
+            ),
+            Text(
+              'Creando tu cuenta...',
+              style: AppTypography.body.copyWith(
+                color: AppColors.ink2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -378,19 +520,29 @@ class _BirthdayField extends StatelessWidget {
   }
 }
 
-/// Optional, so it starts with nothing selected and stays that way unless the
-/// patient chooses. Declining is expressed by leaving it blank, not by a third
-/// option that means the same thing.
+/// Required, and offering only [Gender.selectable] — two options, not three.
+///
+/// Two consequences of being required, both deliberate:
+///
+/// * **Tapping the selected chip no longer clears it.** Un-selecting was the
+///   way to un-answer an optional question; on a required field it is just a
+///   way to make the form invalid by accident.
+/// * **It carries its own error line**, like `_BirthdayField`, because it is
+///   not a [TextFormField] and so `Form.validate()` never sees it. A required
+///   field outside the `Form` needs the screen to check it by hand — which is
+///   what `_submit` does.
 class _GenderField extends StatelessWidget {
   const _GenderField({
     required this.value,
+    required this.showError,
     required this.enabled,
     required this.onChanged,
   });
 
   final Gender? value;
+  final bool showError;
   final bool enabled;
-  final ValueChanged<Gender?> onChanged;
+  final ValueChanged<Gender> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -398,25 +550,29 @@ class _GenderField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.md,
       children: <Widget>[
-        const AppKicker(text: 'Sexo (opcional)', size: 11),
+        const AppKicker(text: 'Sexo', size: 11),
         Row(
           spacing: AppSpacing.sm,
           children: <Widget>[
-            for (final Gender gender in Gender.values)
+            for (final Gender gender in Gender.selectable)
               Expanded(
                 child: AppChip(
                   label: gender.label,
                   selected: value == gender,
                   expand: true,
-                  // Tapping the selected one clears it, which is the only way
-                  // to un-answer an optional question.
-                  onTap: enabled
-                      ? () => onChanged(value == gender ? null : gender)
-                      : null,
+                  onTap: enabled ? () => onChanged(gender) : null,
                 ),
               ),
           ],
         ),
+        if (showError)
+          Text(
+            'Selecciona tu sexo',
+            style: AppTypography.cap.copyWith(
+              color: AppColors.emergency,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
       ],
     );
   }

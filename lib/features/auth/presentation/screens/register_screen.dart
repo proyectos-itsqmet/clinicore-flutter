@@ -11,6 +11,7 @@ import '../../../../shared/helpers/validators.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
 import '../blocs/registration/registration_bloc.dart';
 import '../widgets/auth_form_shell.dart';
+import '../widgets/registration_flow_listeners.dart';
 
 /// Step 1 of 3 — the email and cedula the account will be filed under.
 ///
@@ -66,25 +67,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<RegistrationBloc, RegistrationState>(
-      listenWhen: (previous, current) =>
-          previous.step != current.step || previous.status != current.status,
-      listener: (context, state) {
+    return RegistrationFlowListeners(
+      onStepChanged: (BuildContext context, RegistrationState state) {
         if (state.step == RegistrationStep.verification) {
           context.push(AppPath.registerVerificationScreen);
-          return;
-        }
-        final failure = state.failure;
-        if (state.status == RegistrationStatus.failure && failure != null) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text(failure.message)));
-          context.read<RegistrationBloc>().add(
-            const RegistrationFailureDismissed(),
-          );
         }
       },
-      builder: (context, state) {
+      child: BlocBuilder<RegistrationBloc, RegistrationState>(
+        builder: (context, state) {
         return AuthFormShell(
           kicker: 'Paso 1 de 3',
           title: 'Empecemos por lo basico.',
@@ -154,9 +144,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
               trailing: const Icon(AppIcons.arrowRight),
               onPressed: _submit,
             ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }

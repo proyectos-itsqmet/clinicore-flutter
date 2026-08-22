@@ -105,19 +105,21 @@ class CacheFailure extends Failure {
 
 /// The endpoint this feature needs does not exist on the server yet.
 ///
-/// This is not a defensive catch-all — it is used deliberately, in exactly
-/// one place, for password recovery. The QMS backend has `login-patient`,
-/// `init-registration-patient` and `register-patient`, and NOTHING for
-/// resetting a forgotten password. Rather than let the app fail with a raw
-/// 404 or, worse, pretend the mail was sent, the data source returns this and
-/// the screen says so plainly.
+/// **Currently unused, and kept on purpose.** It existed for password
+/// recovery, which now ships as three real endpoints
+/// (`/auth/recover-password/*`), so the one place that returned it is gone.
 ///
-/// Delete this class the day those two endpoints ship.
+/// It stays because the pattern is still needed: `/auth/verify-otp` does not
+/// exist, so REGISTRATION's code is still unverified. The day that step is
+/// wired properly, this is what it returns while the route is missing —
+/// better than a raw 404 or, worse, pretending the code was checked.
+///
+/// Delete it if that gap closes too and nothing else claims it.
 class NotImplementedOnServerFailure extends Failure {
   const NotImplementedOnServerFailure({
     super.message =
-        'La recuperacion de contrasena todavia no esta habilitada. '
-        'Comunicate con la clinica para restablecerla.',
+        'Esta funcion todavia no esta habilitada en el servidor. '
+        'Comunicate con la clinica.',
     super.debugDetail,
   });
 }

@@ -15,7 +15,14 @@ class AppPath {
 
   //! Auth — all outside the shell, so they cover the whole screen.
   static const loginScreen = '/login';
+
+  //! Password recovery — three steps under one prefix, for the same reason
+  //! registration has one: a `ShellRoute` owns the `RecoveryBloc` so the
+  //! address captured in step 1 survives two pushes, and each step's
+  //! short-lived token is issued by the step before it.
   static const forgotPasswordScreen = '/recuperar-contrasena';
+  static const recoveryCodeScreen = '/recuperar-contrasena/codigo';
+  static const recoveryPasswordScreen = '/recuperar-contrasena/nueva';
 
   //! Registration — a three-step flow under one prefix.
   //!
@@ -60,10 +67,16 @@ class AppPath {
   /// An authenticated patient who lands on one of these is bounced to
   /// [bookingScreen] — otherwise the back button after login walks straight
   /// back into the login form.
+  /// `startsWith` for both multi-step flows, not `==`.
+  ///
+  /// A recovery in progress sits at `/recuperar-contrasena/codigo`, and an
+  /// exact match on the prefix alone would leave that location outside the auth
+  /// flow — so the guard would bounce the patient to login mid-recovery, on the
+  /// screen where they were about to type the code.
   static bool isAuthFlow(String location) {
     return location == splashScreen ||
         location == loginScreen ||
-        location == forgotPasswordScreen ||
+        location.startsWith(forgotPasswordScreen) ||
         location.startsWith(registerScreen);
   }
 }

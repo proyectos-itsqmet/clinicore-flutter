@@ -20,6 +20,12 @@ import '../atoms/atoms.dart';
 /// * `h1` in white and `lead` in **tint**, which is the board's own choice for
 ///   body copy on dark (`#EAF2FC`) — not white at reduced opacity.
 ///
+/// [kicker], [title] and [subtitle] are ALL optional, and a screen may pass
+/// none of them: the brand row carries the hero on its own. They are null
+/// rather than empty strings on purpose — an empty [Text] still occupies its
+/// line height and still earns its slot in the column's `spacing`, so `''`
+/// buys a phantom gap that is very hard to trace back to the copy.
+///
 /// Pass [image] once `assets/images/` has a hero photograph and the Ken Burns
 /// drift (`scale 1 -> 1.09` over 14s, alternating) comes with it. Until then
 /// the gradient carries the header on its own, which is why the scrim is
@@ -35,7 +41,7 @@ import '../atoms/atoms.dart';
 class AppAuthHero extends StatelessWidget {
   const AppAuthHero({
     super.key,
-    required this.title,
+    this.title,
     this.kicker,
     this.subtitle,
     this.collapsed = false,
@@ -44,7 +50,7 @@ class AppAuthHero extends StatelessWidget {
     this.onBack,
   });
 
-  final String title;
+  final String? title;
   final String? kicker;
   final String? subtitle;
 
@@ -133,12 +139,13 @@ class AppAuthHero extends StatelessWidget {
                             tone: AppKickerTone.soft,
                             leading: const AppLiveDot(),
                           ),
-                        Text(
-                          title,
-                          style: AppTypography.h1.copyWith(
-                            color: AppColors.surface,
+                        if (title != null)
+                          Text(
+                            title!,
+                            style: AppTypography.h1.copyWith(
+                              color: AppColors.surface,
+                            ),
                           ),
-                        ),
                         if (subtitle != null)
                           Text(
                             subtitle!,

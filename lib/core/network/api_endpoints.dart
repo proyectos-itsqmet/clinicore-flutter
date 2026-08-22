@@ -66,6 +66,63 @@ abstract final class ApiEndpoints {
   static const String registerPatient = '$_auth/register-patient';
 
   // ==========================================================
+  // PASSWORD RECOVERY — three steps, and each one issues the token the
+  // next one authenticates with
+  // ==========================================================
+  //
+  // Read off `AuthController` lines 159-208 and `AuthService` lines 225-260.
+  //
+  // Unlike login, NONE of these has a `/mobile/` variant: all three hand their
+  // token back as `Set-Cookie: jwt=...`, so the client reads it out of the
+  // header itself — the same job `_tokenFromSetCookie` already does for
+  // registration.
+  //
+  // | step   | needs                  | returns a token that     | lifetime |
+  // |--------|------------------------|--------------------------|----------|
+  // | init   | nothing                | ROLE_OTP_PENDING         | 300s     |
+  // | verify | the init token         | ROLE_CHANGE_PASSWORD     | 600s     |
+  // | change | the verify token       | — (clears the cookie)    | —        |
+  //
+  // **This OTP is real**, which is the difference from registration's.
+  // `initPasswordRecovery` calls `otpService.saveOtp` (AuthService:234), so
+  // `validate` has something to compare against. Three wrong tries blocks the
+  // code (`OtpData.excedioIntentos`).
+
+  /// `POST /auth/recover-password/init` — step 1.
+  ///
+  /// Body: `{ "email": String }` — `RecoverPasswordInitBody`, `@NotBlank` and
+  /// `@Email`. Looks the address up across patients, doctors AND operators.
+  ///
+  /// 200: `{ "Message": "Se ha enviado un código OTP a tu correo" }` — capital
+  /// `M`, like `init-registration-patient`.
+  /// 404: `{ "message": "No existe un usuario con ese correo" }`.
+  ///
+  /// Must go out WITHOUT a token: see `AuthInterceptor._anonymousPaths`.
+  static const String recoverPasswordInit = '$_auth/recover-password/init';
+
+  /// `POST /auth/recover-password/verify-otp` — step 2.
+  ///
+  /// Body: `{ "otp": String }` — `VerifyOtpBody`. Authenticates with step 1's
+  /// token; the server takes the email from `auth.getName()`, so the client
+  /// never re-sends it.
+  ///
+  /// 200: `{ "Message": "Código verificado correctamente" }`.
+  /// 400: "Has superado el límite de intentos" (after 3 wrong codes) or
+  /// "Código OTP incorrecto o expirado".
+  static const String recoverPasswordVerifyOtp =
+      '$_auth/recover-password/verify-otp';
+
+  /// `POST /auth/recover-password/change` — step 3.
+  ///
+  /// Body: `{ "password": String, "repeatedPassword": String }` —
+  /// `ChangePasswordBody`. The server compares them itself and answers 400
+  /// "Las contraseñas no coinciden", so the client's own confirm-field check is
+  /// a courtesy, not the guarantee.
+  ///
+  /// Authenticates with step 2's token. 200: `{ "Message": String }`.
+  static const String recoverPasswordChange = '$_auth/recover-password/change';
+
+  // ==========================================================
   // NOT ON THE SERVER YET
   // ==========================================================
 
@@ -80,12 +137,6 @@ abstract final class ApiEndpoints {
   /// Consequence today: the emailed code is decorative. The flash token from
   /// step 1 alone is enough to complete registration.
   static const String verifyOtp = '$_auth/verify-otp';
-
-  /// **DOES NOT EXIST.** No password recovery of any kind is implemented.
-  static const String forgotPassword = '$_auth/forgot-password';
-
-  /// **DOES NOT EXIST.** See [forgotPassword].
-  static const String resetPassword = '$_auth/reset-password';
 
   /// **DOES NOT EXIST as a route**, though `JwtValidator` special-cases
   /// `/auth/logout` in its exception handler so an expired token can still
