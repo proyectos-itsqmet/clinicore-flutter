@@ -16,13 +16,11 @@ import '../widgets/recovery_flow_listeners.dart';
 
 /// Step 2 of 3 — the code from the mail.
 ///
-/// ## This one is actually verified
-///
-/// Worth stating because the app has a second OTP screen that is not:
-/// registration's code is decorative, since `AuthService.initRegistration`
-/// never calls `otpService.saveOtp`. Recovery's DOES
-/// (`initPasswordRecovery`, AuthService:234), so `validate` has something to
-/// compare against and a wrong code is a real rejection.
+/// The app has a second OTP screen, [OtpScreen] for registration, and the two
+/// are now symmetric: both store a code server-side and both reject a wrong
+/// one. They stay SEPARATE endpoints because they authorise different things —
+/// this one hands out `ROLE_CHANGE_PASSWORD`, registration's hands out
+/// `ROLE_REGISTER_VERIFIED` — and one token that did both would be a hole.
 ///
 /// ## Three tries, and then the code is dead
 ///

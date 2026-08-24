@@ -35,19 +35,20 @@ part 'registration_state.dart';
 ///
 /// ## About the OTP step
 ///
-/// **The server does not verify the code.** `AuthService.initRegistration`
-/// generates one and mails it, but never calls `OtpService.saveOtp`, and
-/// nothing anywhere calls `OtpService.validate` — there is no verification
-/// route to call. So [RegistrationCodeSubmitted] checks the shape of the code
-/// and advances locally, and the code the patient types is currently
-/// decorative.
+/// The code IS verified by the server now — `POST /auth/verify-otp`. It used
+/// not to be: `initRegistration` mailed a code but never stored it, so there
+/// was nothing to check it against and this handler advanced the step locally.
+/// Both halves exist today, so the code the patient types is no longer
+/// decorative and a wrong one keeps them on this step.
 ///
-/// The step is kept because the flow is correct and the wiring is real: when
-/// the endpoint lands, this handler calls it and nothing else changes. What is
-/// NOT done here is pretending to validate — see the note the screen shows.
+/// **Three wrong codes block the address**, and the block is per address rather
+/// than per attempt — so the only way out is [RegistrationCodeResendRequested],
+/// which re-runs step 1. That is also what refreshes the 300-second token, so
+/// it is the right escape hatch for both problems at once.
 class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
   RegistrationBloc({
     required this.initRegistration,
+    required this.verifyRegistrationOtp,
     required this.completeRegistration,
   }) : super(const RegistrationState()) {
     on<RegistrationIdentitySubmitted>(_onIdentitySubmitted);
@@ -59,6 +60,7 @@ class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
   }
 
   final InitRegistration initRegistration;
+  final VerifyRegistrationOtp verifyRegistrationOtp;
   final CompleteRegistration completeRegistration;
 
   /// Step 1 — claim the email and cedula, get a code mailed.
@@ -90,19 +92,39 @@ class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
     );
   }
 
-  /// Step 2 — the code.
+  /// Step 2 — the code, checked by the server.
   ///
-  /// Local only. See the class doc: there is nothing to call.
-  void _onCodeSubmitted(
+  /// The step only advances on success. On failure the patient stays here with
+  /// the server's own message ("El código no es válido", "Has superado el
+  /// límite de intentos"), which is more useful than anything this bloc could
+  /// invent — it is the only side that knows what the real code was.
+  ///
+  /// `otp` is still stored in the state. Step 3 does not send it, so this is
+  /// only so the screen can keep showing what was typed if the flow walks back.
+  Future<void> _onCodeSubmitted(
     RegistrationCodeSubmitted event,
     Emitter<RegistrationState> emit,
-  ) {
+  ) async {
     emit(
-      state.copyWith(
-        status: RegistrationStatus.idle,
-        step: RegistrationStep.profile,
-        otp: event.code,
-        clearFailure: true,
+      state.copyWith(status: RegistrationStatus.submitting, clearFailure: true),
+    );
+
+    final result = await verifyRegistrationOtp(
+      VerifyRegistrationOtpParams(otp: event.code),
+    );
+
+    emit(
+      result.fold(
+        (failure) => state.copyWith(
+          status: RegistrationStatus.failure,
+          failure: failure,
+        ),
+        (_) => state.copyWith(
+          status: RegistrationStatus.idle,
+          step: RegistrationStep.profile,
+          otp: event.code,
+          clearFailure: true,
+        ),
       ),
     );
   }

@@ -16,6 +16,21 @@ import '../../features/auth/presentation/blocs/auth/auth_bloc.dart';
 import '../../features/auth/presentation/blocs/login/login_bloc.dart';
 import '../../features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import '../../features/auth/presentation/blocs/registration/registration_bloc.dart';
+import '../../features/home/data/datasources/appointments_remote_data_source.dart';
+import '../../features/home/data/datasources/booking_remote_data_source.dart';
+import '../../features/home/data/datasources/patient_remote_data_source.dart';
+import '../../features/home/data/repositories/appointments_repository_impl.dart';
+import '../../features/home/data/repositories/booking_repository_impl.dart';
+import '../../features/home/data/repositories/patient_repository_impl.dart';
+import '../../features/home/domain/repositories/appointments_repository.dart';
+import '../../features/home/domain/repositories/booking_repository.dart';
+import '../../features/home/domain/repositories/patient_repository.dart';
+import '../../features/home/domain/usecases/appointments_usecases.dart';
+import '../../features/home/domain/usecases/booking_usecases.dart';
+import '../../features/home/domain/usecases/profile_usecases.dart';
+import '../../features/home/presentation/blocs/appointments/appointments_bloc.dart';
+import '../../features/home/presentation/blocs/booking/booking_bloc.dart';
+import '../../features/home/presentation/blocs/profile/profile_bloc.dart';
 import '../network/dio_client.dart';
 import '../network/token_store.dart';
 
@@ -84,6 +99,7 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => CanUnlockWithBiometrics(sl()));
   sl.registerLazySingleton(() => UnlockWithBiometrics(sl()));
   sl.registerLazySingleton(() => InitRegistration(sl()));
+  sl.registerLazySingleton(() => VerifyRegistrationOtp(sl()));
   sl.registerLazySingleton(() => CompleteRegistration(sl()));
   sl.registerLazySingleton(() => RestoreSession(sl()));
   sl.registerLazySingleton(() => SignOut(sl()));
@@ -112,7 +128,11 @@ Future<void> configureDependencies() async {
   );
 
   sl.registerFactory<RegistrationBloc>(
-    () => RegistrationBloc(initRegistration: sl(), completeRegistration: sl()),
+    () => RegistrationBloc(
+      initRegistration: sl(),
+      verifyRegistrationOtp: sl(),
+      completeRegistration: sl(),
+    ),
   );
 
   // A factory, like the other flow blocs: a recovery that was abandoned
@@ -123,6 +143,76 @@ Future<void> configureDependencies() async {
       initPasswordRecovery: sl(),
       verifyRecoveryOtp: sl(),
       changePassword: sl(),
+    ),
+  );
+
+  // ==========================================================
+  // HOME — data
+  // ==========================================================
+  sl.registerLazySingleton<PatientRemoteDataSource>(
+    () => PatientRemoteDataSourceImpl(sl()),
+  );
+
+  sl.registerLazySingleton<AppointmentsRemoteDataSource>(
+    () => AppointmentsRemoteDataSourceImpl(sl()),
+  );
+
+  sl.registerLazySingleton<PatientRepository>(() => PatientRepositoryImpl(sl()));
+
+  sl.registerLazySingleton<AppointmentsRepository>(
+    () => AppointmentsRepositoryImpl(sl()),
+  );
+
+  sl.registerLazySingleton<BookingRemoteDataSource>(
+    () => BookingRemoteDataSourceImpl(sl()),
+  );
+
+  sl.registerLazySingleton<BookingRepository>(() => BookingRepositoryImpl(sl()));
+
+  // ==========================================================
+  // HOME — domain
+  // ==========================================================
+  sl.registerLazySingleton(() => GetMyProfile(sl()));
+  sl.registerLazySingleton(() => UpdateMyContact(sl()));
+  sl.registerLazySingleton(() => GetMyAppointments(sl()));
+  sl.registerLazySingleton(() => GetBookingOptions(sl()));
+  sl.registerLazySingleton(() => GetAvailability(sl()));
+  sl.registerLazySingleton(() => BookSlot(sl()));
+
+  // ==========================================================
+  // HOME — presentation
+  // ==========================================================
+
+  // A LAZY SINGLETON, unlike the form blocs, and it is the same exception
+  // AuthBloc gets: two screens read the same record ("Mi perfil" shows the
+  // name and cedula, "Mi informacion" shows all of it), and a factory would
+  // refetch the profile every time the patient navigates between them. There
+  // is no stale form error to carry into a second visit — the state is a
+  // record, not a submission.
+  sl.registerLazySingleton<ProfileBloc>(
+    () => ProfileBloc(getMyProfile: sl(), updateMyContact: sl()),
+  );
+
+  // A FACTORY, and parameterised by SCOPE: each list is its own instance, so
+  // the segmented control swaps blocs instead of refetching every time the
+  // patient looks back and forth between "Proximas" and "Pasadas".
+  //
+  // A factory and not a singleton for the usual reason plus one specific to a
+  // clinic: on a shared phone, a singleton would carry one patient's
+  // appointments into the next patient's session.
+  sl.registerFactoryParam<AppointmentsBloc, AppointmentScope, void>(
+    (AppointmentScope scope, _) =>
+        AppointmentsBloc(getMyAppointments: sl(), scope: scope),
+  );
+
+  // A factory, like the auth flow blocs: "Agendar" is a multi-step flow, and a
+  // singleton would resume with a slot the patient chose an hour ago — which by
+  // then may belong to somebody else.
+  sl.registerFactory<BookingBloc>(
+    () => BookingBloc(
+      getBookingOptions: sl(),
+      getAvailability: sl(),
+      bookSlot: sl(),
     ),
   );
 }

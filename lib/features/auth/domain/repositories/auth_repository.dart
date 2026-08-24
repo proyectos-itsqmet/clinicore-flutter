@@ -32,7 +32,20 @@ abstract interface class AuthRepository {
     required String cedula,
   });
 
-  /// Step 2 of registration. Returns a full session — the server signs the
+  /// Step 2 of registration: the mailed code.
+  ///
+  /// The email is not a parameter — the server reads it from step 1's token,
+  /// the same reasoning as [verifyRecoveryOtp].
+  ///
+  /// **Three wrong codes block the address** and the block is per address, so
+  /// recovering from it means going back to [initRegistration], which is what
+  /// mails a new code and clears the block.
+  ///
+  /// Succeeding swaps step 1's token for one that step 3 accepts just as well,
+  /// so the flow does not lose its authorisation by verifying.
+  Future<Either<Failure, Unit>> verifyRegistrationOtp({required String otp});
+
+  /// Step 3 of registration. Returns a full session — the server signs the
   /// new patient in as part of creating them.
   Future<Either<Failure, AuthSession>> completeRegistration(
     PatientRegistration registration,
