@@ -32,6 +32,7 @@ void main() {
 
   RegistrationBloc buildRegistrationBloc() => RegistrationBloc(
     initRegistration: InitRegistration(repository),
+    verifyRegistrationOtp: VerifyRegistrationOtp(repository),
     completeRegistration: CompleteRegistration(repository),
   );
 
@@ -232,6 +233,56 @@ void main() {
       );
 
       expect(done.session, FakeAuthRepository.testSession);
+      await bloc.close();
+    });
+
+    test('sends the typed code to the server instead of advancing', () async {
+      // The regression this guards: step 2 used to advance locally, because
+      // there was no route to call. The emailed code was decorative and ANY
+      // six digits got through.
+      final RegistrationBloc bloc = buildRegistrationBloc()
+        ..add(
+          const RegistrationIdentitySubmitted(
+            email: 'ana@clinica.ec',
+            cedula: '1712345675',
+          ),
+        );
+      await bloc.stream.firstWhere(
+        (s) => s.step == RegistrationStep.verification,
+      );
+
+      bloc.add(const RegistrationCodeSubmitted('482913'));
+      await bloc.stream.firstWhere((s) => s.step == RegistrationStep.profile);
+
+      expect(repository.lastRegistrationOtp, '482913');
+      await bloc.close();
+    });
+
+    test('a wrong code keeps the patient on the code step', () async {
+      repository.verifyRegistrationOtpResult = const Left<Failure, Unit>(
+        ValidationFailure(message: 'El código no es válido'),
+      );
+
+      final RegistrationBloc bloc = buildRegistrationBloc()
+        ..add(
+          const RegistrationIdentitySubmitted(
+            email: 'ana@clinica.ec',
+            cedula: '1712345675',
+          ),
+        );
+      await bloc.stream.firstWhere(
+        (s) => s.step == RegistrationStep.verification,
+      );
+
+      bloc.add(const RegistrationCodeSubmitted('000000'));
+      final RegistrationState state = await bloc.stream.firstWhere(
+        (s) => s.status == RegistrationStatus.failure,
+      );
+
+      // Still on `verification`, and showing the server's own words — the
+      // server owns the 3-attempt budget, not the bloc.
+      expect(state.step, RegistrationStep.verification);
+      expect((state.failure! as ValidationFailure).message, 'El código no es válido');
       await bloc.close();
     });
 

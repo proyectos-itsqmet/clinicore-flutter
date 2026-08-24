@@ -29,6 +29,9 @@ class FakeAuthRepository implements AuthRepository {
   Either<Failure, Unit> initRegistrationResult = const Right<Failure, Unit>(
     unit,
   );
+  Either<Failure, Unit> verifyRegistrationOtpResult = const Right<Failure, Unit>(
+    unit,
+  );
   Either<Failure, AuthSession> completeRegistrationResult = Right(testSession);
   Either<Failure, AuthSession?> restoreSessionResult =
       const Right<Failure, AuthSession?>(null);
@@ -54,6 +57,11 @@ class FakeAuthRepository implements AuthRepository {
   PatientRegistration? lastRegistration;
   int signOutCount = 0;
   int initRegistrationCount = 0;
+
+  /// The code step 2 actually submitted. This is the assertion that the OTP is
+  /// no longer decorative: the flow must send what the patient typed, not
+  /// advance past it.
+  String? lastRegistrationOtp;
 
   String? lastRecoveryEmail;
   String? lastRecoveryOtp;
@@ -96,6 +104,14 @@ class FakeAuthRepository implements AuthRepository {
     lastInitCedula = cedula;
     initRegistrationCount++;
     return initRegistrationResult;
+  }
+
+  @override
+  Future<Either<Failure, Unit>> verifyRegistrationOtp({
+    required String otp,
+  }) async {
+    lastRegistrationOtp = otp;
+    return verifyRegistrationOtpResult;
   }
 
   @override

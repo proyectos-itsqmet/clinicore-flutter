@@ -16,30 +16,32 @@ import '../widgets/registration_flow_listeners.dart';
 
 /// Step 2 of 3 — the code from the email.
 ///
-/// ## Read this before trusting the code
+/// ## The code is verified now
 ///
-/// **The server does not check it.** `AuthService.initRegistration` generates
-/// a code and mails it, but never calls `OtpService.saveOtp`, so the store it
-/// would be compared against is always empty — and nothing anywhere calls
-/// `OtpService.validate`, because there is no route that would. The flash token
-/// issued alongside the mail is, on its own, enough to complete registration.
-///
-/// So this screen validates the SHAPE of the code (six digits) and advances.
-/// It does not claim to have verified anything.
-///
-/// The on-screen notice that used to say so was removed on request, which
-/// makes this comment the only remaining record — so keep it. Whoever wires
-/// the real verification needs THREE things, not one: the route
-/// `/auth/verify-otp` has to exist, `AuthService.initRegistration` has to
-/// actually call `OtpService.saveOtp` (today it never does, so `otpStore` is
-/// permanently empty and `validate` would return false for every code), and
-/// `RegistrationBloc._onCodeSubmitted` has to call it instead of advancing
+/// It was not, and the note that used to live here said so at length. Three
+/// things were missing and all three are done: the route `/auth/verify-otp`
+/// exists, `AuthService.initRegistration` calls `otpService.saveOtp` (so the
+/// store `validate` compares against is no longer permanently empty), and
+/// `RegistrationBloc._onCodeSubmitted` calls the endpoint instead of advancing
 /// locally.
 ///
-/// The step is kept, rather than skipped, for two reasons. The resend action
-/// refreshes the 5-minute token, which a patient who paused genuinely needs.
-/// And when the verification endpoint lands, this is the handler that calls it:
-/// `RegistrationCodeSubmitted` already carries the code into the bloc.
+/// ## Two kinds of error on one screen
+///
+/// [_error] is LOCAL and only about shape — six digits. It renders under the
+/// field, before anything is sent.
+///
+/// A rejection from the server ("El código no es válido") arrives as a bloc
+/// failure and goes to the snackbar via `RegistrationFlowListeners`, the same
+/// path step 1 and step 3 use. Keeping the two apart is deliberate: one says
+/// "you mistyped", the other says "the server disagrees", and collapsing them
+/// into one string would lose which.
+///
+/// ## Three tries, and then the code is dead
+///
+/// `OtpData.excedioIntentos()` blocks at 3 failures and the block lives with
+/// the stored code, so retrying here cannot clear it. "Reenviar codigo" is the
+/// only way out — it re-runs step 1, which mails a new code AND refreshes the
+/// 300-second token, so it is the escape hatch for both failure modes at once.
 class OtpScreen extends StatefulWidget {
   const OtpScreen({super.key});
 

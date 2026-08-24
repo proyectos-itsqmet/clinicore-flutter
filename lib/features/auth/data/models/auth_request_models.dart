@@ -58,8 +58,13 @@ class RecoverPasswordInitRequestModel {
 /// The email is deliberately absent: `AuthController.verifyRecoveryOtp` reads
 /// it from `auth.getName()` on the step-1 token. Sending it in the body would
 /// invite the two to disagree.
-class VerifyRecoveryOtpRequestModel {
-  const VerifyRecoveryOtpRequestModel({required this.otp});
+///
+/// One model for BOTH otp endpoints — `/auth/verify-otp` (registration) and
+/// `/auth/recover-password/verify-otp` — because both bind the same
+/// `com.devluis.types.VerifyOtpBody`. The endpoints stay separate on purpose,
+/// since they authorise different things; the request body does not.
+class VerifyOtpRequestModel {
+  const VerifyOtpRequestModel({required this.otp});
 
   final String otp;
 

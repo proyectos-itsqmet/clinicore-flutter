@@ -122,21 +122,123 @@ abstract final class ApiEndpoints {
   /// Authenticates with step 2's token. 200: `{ "Message": String }`.
   static const String recoverPasswordChange = '$_auth/recover-password/change';
 
+  /// `POST /auth/verify-otp` — verifies REGISTRATION's code.
+  ///
+  /// **This used to say "DOES NOT EXIST". It does now** (2026-08-24), and the
+  /// two bugs that made the old code decorative are fixed with it:
+  /// `AuthService.initRegistration` now calls `otpService.saveOtp`, so
+  /// `otpStore` has something to compare against, and the route that calls
+  /// `validate` exists.
+  ///
+  /// Body: `{ "otp": String }` — `VerifyOtpBody`, the same shape recovery
+  /// uses. Authenticates with step 1's `ROLE_OTP_PENDING` flash token; the
+  /// server takes the email from `auth.getName()`.
+  ///
+  /// Returns a NEW flash token via `Set-Cookie`, carrying
+  /// `ROLE_REGISTER_VERIFIED`, 300s.
+  ///
+  /// **It is ADDITIVE**, which is what makes the token swap safe:
+  /// `register-patient` has no `hasAuthority` matcher in `GlobalConfig` and
+  /// `AuthService.completeRegistration` only compares `auth.getName()` with the
+  /// submitted email. Both flash tokens carry the same subject, so step 3
+  /// accepts either one — `ROLE_REGISTER_VERIFIED` exists so the server CAN
+  /// start requiring it once every client verifies.
+  ///
+  /// Consumed by `RegistrationBloc._onCodeSubmitted`.
+  static const String verifyOtp = '$_auth/verify-otp';
+
+  // ==========================================================
+  // PATIENT — the signed-in patient's own record
+  // ==========================================================
+
+  /// `@RequestMapping("/api/patients")` on `PatientController`.
+  static const String _patients = '/api/patients';
+
+  /// `GET /api/patients/me` — the signed-in patient's profile.
+  ///
+  /// Added 2026-08-24; `PatientService.getPatientById` had existed for a while
+  /// as unreachable code.
+  ///
+  /// Takes no parameters: the server reads the UUID out of the token. That is
+  /// worth knowing because the subject of the login token IS a UUID, not an
+  /// email — `PatientService.loadUserByUsername` builds the `UserDetails` with
+  /// `.username(patient.getUuid().toString())`. The registration FLASH token
+  /// carries the email instead, so this endpoint only answers to the 24h
+  /// login token.
+  ///
+  /// 200 body: `PatientDTO`. `password` is always null — the server's mapper
+  /// never sets it.
+  static const String patientMe = '$_patients/me';
+
+  /// `PUT /api/patients/me` — updates the signed-in patient's CONTACT data.
+  ///
+  /// Body: `PatientDTO`. The server ignores identity fields on purpose
+  /// (`PatientService.updatePatient` only copies address, phone, the two
+  /// emergency-contact fields and the email): the medical history is filed
+  /// under the name, cedula and birthday, so those cannot move from an app.
+  /// Sending them is harmless, they are simply dropped.
+  ///
+  /// 200 body: the updated `PatientDTO`.
+  static const String patientMeUpdate = '$_patients/me';
+
+  // ==========================================================
+  // TURNS — the patient's appointments
+  // ==========================================================
+
+  /// `@RequestMapping("/api/turns")` on `TurnController`.
+  static const String _turns = '/api/turns';
+
+  /// `GET /api/turns/me` — the signed-in patient's appointments, paginated.
+  ///
+  /// Query: `status`, `from`, `to` (ISO `yyyy-MM-dd`), `page`, `size`. All
+  /// optional. Filtered server-side by the patient in the token, which is the
+  /// whole reason this exists instead of `GET /api/turns` — that one returns
+  /// every turn in the system, other patients' cedulas included.
+  ///
+  /// `status` is what splits the "Proximas" / "Pasadas" tabs:
+  /// `TURN_PENDING` / `TURN_WAITNG` vs `TURN_TREATED` / `TURN_CANCELLED`.
+  /// Note the typo in `TURN_WAITNG` — it is the value stored in the database,
+  /// so the client spells it wrong too. Fixing it is a migration, not a
+  /// rename.
+  ///
+  /// 200 body: a Spring `Page<TurnDTO>`.
+  static const String turnsMe = '$_turns/me';
+
+  /// `POST /api/turns` — books a turn for the signed-in patient.
+  ///
+  /// Body: `TurnDTO` with a `schedule.id`. The server resolves the patient
+  /// from the token and assigns the next `order` for that schedule's day.
+  static const String turns = _turns;
+
+  // ==========================================================
+  // AVAILABILITY — what "Agendar" is built from
+  // ==========================================================
+
+  /// `GET /api/schedules` — bookable slots, WITH FILTERS.
+  ///
+  /// Query: `doctorId` (UUID), `serviceId`, `stablishmentId`, `from`, `to`
+  /// (ISO `yyyy-MM-dd`), `status`, plus `page` / `size`. All optional; with
+  /// none of them it behaves like the old unfiltered listing, so nothing that
+  /// called it before changed.
+  ///
+  /// The filters landed 2026-08-24 and they are what makes the three steps of
+  /// "Agendar" possible: `doctorId` + `serviceId` + `status=STATUS_FREE`
+  /// yields the distinct dates (step 2) and the hours of each date (step 3).
+  ///
+  /// **Ask for a big `size`.** The default page is 10, and a week of 20-minute
+  /// slots is far more than that — a day grid built from page 0 silently
+  /// misses the afternoon.
+  static const String schedules = '/api/schedules';
+
+  /// `GET /api/doctors` — step 1 of "Agendar". Paginated.
+  static const String doctors = '/api/doctors';
+
+  /// `GET /api/services` — the consultation types. Paginated.
+  static const String services = '/api/services';
+
   // ==========================================================
   // NOT ON THE SERVER YET
   // ==========================================================
-
-  /// **DOES NOT EXIST.** There is no OTP verification endpoint.
-  ///
-  /// `OtpService` has `generateOtp`, `saveOtp` and `validate`, but
-  /// `AuthService.initRegistration` calls only `generateOtp` — it never calls
-  /// `saveOtp`, so `otpStore` is always empty — and nothing anywhere calls
-  /// `validate`. The code the app would need is written; it is simply not
-  /// wired to a route.
-  ///
-  /// Consequence today: the emailed code is decorative. The flash token from
-  /// step 1 alone is enough to complete registration.
-  static const String verifyOtp = '$_auth/verify-otp';
 
   /// **DOES NOT EXIST as a route**, though `JwtValidator` special-cases
   /// `/auth/logout` in its exception handler so an expired token can still

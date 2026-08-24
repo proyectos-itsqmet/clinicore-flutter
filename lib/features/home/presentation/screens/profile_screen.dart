@@ -8,6 +8,9 @@ import '../../../auth/presentation/blocs/auth/auth_bloc.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
 import '../../../../shared/ui/molecules/molecules.dart';
+import '../../domain/entities/patient_profile.dart';
+import '../blocs/profile/profile_bloc.dart';
+import '../widgets/profile_scope.dart';
 
 /// The "Mi perfil" tab.
 ///
@@ -20,6 +23,56 @@ import '../../../../shared/ui/molecules/molecules.dart';
 /// "Politica de privacidad" gets tapped by mistake.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ProfileScope(child: _ProfileView(onSignOut: _confirmSignOut));
+  }
+
+  /// Signing out on a shared phone loses nothing, but on a personal one it
+  /// means re-entering a password to see tomorrow's appointment. Worth one
+  /// tap of confirmation.
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cerrar sesion?'),
+        content: const Text(
+          'Vas a tener que ingresar de nuevo para ver tus citas.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'Cancelar',
+              style: AppTypography.button.copyWith(color: AppColors.ink2),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'Cerrar sesion',
+              style: AppTypography.button.copyWith(color: AppColors.emergency),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Report the intent; do NOT navigate. AuthBloc clears the token, the
+    // router's refreshListenable notices the session is gone, and the guard
+    // sends the app to login. One place decides where an unauthenticated
+    // patient belongs — see AppRouter._redirect.
+    context.read<AuthBloc>().add(const AuthSignOutRequested());
+  }
+}
+
+class _ProfileView extends StatelessWidget {
+  const _ProfileView({required this.onSignOut});
+
+  final Future<void> Function(BuildContext) onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +91,27 @@ class ProfileScreen extends StatelessWidget {
           children: <Widget>[
             const AppSectionHeading(kicker: 'Tu cuenta', title: 'Mi perfil.'),
 
-            const _IdentityCard(
-              name: '[NOMBRE DEL PACIENTE]',
-              cedula: '[CEDULA]',
+            // The identity card is the ONLY thing on this screen that needs
+            // the record. The three destinations and the sign-out below are
+            // navigation, and gating them behind a fetch would leave a patient
+            // with no connection unable to reach "Cerrar sesion".
+            BlocBuilder<ProfileBloc, ProfileState>(
+              builder: (BuildContext context, ProfileState state) {
+                final PatientProfile? profile = state.profile;
+
+                if (profile == null) {
+                  // A failed load falls through to the skeleton rather than an
+                  // error card: the name is context, not the point of the
+                  // screen, and an error where a name goes reads as an account
+                  // problem.
+                  return const AppSkeleton.card(height: 104);
+                }
+
+                return _IdentityCard(
+                  name: profile.fullName,
+                  cedula: profile.cedula,
+                );
+              },
             ),
 
             // The three destinations the brief asks for.

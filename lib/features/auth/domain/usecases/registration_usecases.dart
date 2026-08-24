@@ -36,7 +36,39 @@ class InitRegistrationParams extends Equatable {
   List<Object?> get props => <Object?>[email, cedula];
 }
 
-/// Step 2 of registration. Creates the patient and returns them signed in.
+/// Step 2 of registration: the mailed code.
+///
+/// No email parameter — the server reads it from step 1's token, so passing it
+/// again would create two sources of truth for the one thing the flow hinges
+/// on. Same shape as [VerifyRecoveryOtp], and deliberately a SEPARATE use case
+/// rather than a shared one with a flag: the two endpoints authorise different
+/// things, and a boolean that decides which account operation you are allowed
+/// to perform is exactly the wrong place to save a class.
+class VerifyRegistrationOtp
+    implements UseCase<Unit, VerifyRegistrationOtpParams> {
+  const VerifyRegistrationOtp(this._repository);
+
+  final AuthRepository _repository;
+
+  @override
+  Future<Either<Failure, Unit>> call(VerifyRegistrationOtpParams params) {
+    return _repository.verifyRegistrationOtp(otp: params.otp);
+  }
+}
+
+class VerifyRegistrationOtpParams extends Equatable {
+  const VerifyRegistrationOtpParams({required this.otp});
+
+  final String otp;
+
+  @override
+  List<Object?> get props => <Object?>[otp];
+
+  @override
+  String toString() => 'VerifyRegistrationOtpParams(otp: <redacted>)';
+}
+
+/// Step 3 of registration. Creates the patient and returns them signed in.
 ///
 /// Takes [PatientRegistration] directly instead of a params wrapper, because
 /// that entity IS the parameter object — wrapping it would add a class whose

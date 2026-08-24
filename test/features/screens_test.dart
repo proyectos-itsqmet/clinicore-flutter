@@ -1,16 +1,24 @@
 import 'package:clinicore_flutter/core/theme/theme.dart';
 import 'package:clinicore_flutter/features/auth/presentation/screens/login_screen.dart';
+import 'package:clinicore_flutter/features/home/domain/repositories/appointments_repository.dart';
+import 'package:clinicore_flutter/features/home/presentation/screens/appointments_screen.dart';
 import 'package:clinicore_flutter/features/home/presentation/screens/booking_screen.dart';
 import 'package:clinicore_flutter/features/home/presentation/screens/profile_screen.dart';
 import 'package:clinicore_flutter/core/error/failures.dart';
 import 'package:clinicore_flutter/features/auth/domain/entities/auth_session.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/auth/auth_bloc.dart';
+import 'package:clinicore_flutter/features/home/domain/entities/appointment.dart';
+import 'package:clinicore_flutter/features/home/domain/entities/availability.dart';
+import 'package:clinicore_flutter/features/home/domain/entities/patient_profile.dart';
+import 'package:clinicore_flutter/features/home/domain/repositories/booking_repository.dart';
+import 'package:clinicore_flutter/shared/ui/atoms/atoms.dart';
 import 'package:clinicore_flutter/shared/ui/organisms/organisms.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/fake_auth_repository.dart';
+import '../helpers/fake_home_repositories.dart';
 import '../helpers/pump_app.dart';
 
 /// Screen-level tests.
@@ -46,8 +54,15 @@ Future<void> _tapLabel(
 
 void main() {
   group('BookingScreen', () {
+    late HomeFakes fakes;
+
+    // The screen resolves its BookingBloc from the locator, so the locator has
+    // to exist. Only the repository is faked — the use cases and the bloc are
+    // real, because "did the screen wire them up" is what these tests check.
+    setUp(() => fakes = setUpHomeDependencies());
+
     testWidgets('renders the three steps of the board', (tester) async {
-      await tester.pumpWidget(_host(const BookingScreen()));
+      await pumpApp(tester, const BookingScreen());
       await tester.pump();
 
       expect(find.text('Elige, mira el valor y confirma.'), findsOneWidget);
@@ -57,75 +72,237 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('step 1 lists the doctors the server returned', (tester) async {
+      await pumpApp(tester, const BookingScreen());
+      await tester.pump();
+
+      expect(find.text('Ana Torres / Pediatria'), findsOneWidget);
+      expect(find.text('Luis Mora / Cardiologia'), findsOneWidget);
+    });
+
     testWidgets('the summary starts empty and the CTA starts disabled', (
       tester,
     ) async {
-      await tester.pumpWidget(_host(const BookingScreen()));
+      await pumpApp(tester, const BookingScreen());
       await tester.pump();
 
       // Three unanswered rows, each showing the board's placeholder dash.
       expect(find.text('--'), findsNWidgets(3));
       expect(find.text('Confirmar cita'), findsOneWidget);
-      expect(find.text('Reservado / 09:00'), findsNothing);
+
+      final AppButton cta = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Confirmar cita'),
+      );
+      expect(cta.onPressed, isNull);
     });
 
-    testWidgets('doctor, day and slot then confirm shows the booked pill', (
+    testWidgets('slots are only fetched once a doctor AND a service are set', (
       tester,
     ) async {
-      await tester.pumpWidget(_host(const BookingScreen()));
+      await pumpApp(tester, const BookingScreen());
       await tester.pump();
 
-      await _tapLabel(tester, 'Dr(a). [APELLIDO 1]');
-      await _tapLabel(tester, '12', settle: AppMotion.tone);
-      await _tapLabel(tester, '09:00');
+      // A service is preselected on load, but no doctor is — so nothing has
+      // been asked for yet.
+      expect(fakes.booking.lastDoctorId, isNull);
 
-      // The summary has picked all three up.
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
+
+      expect(fakes.booking.lastDoctorId, 'd-1');
+      expect(fakes.booking.lastServiceId, 1);
+    });
+
+    testWidgets('confirming books the SLOT id, not the chip index', (
+      tester,
+    ) async {
+      await pumpApp(tester, const BookingScreen());
+      await tester.pump();
+
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
+
+      // The day is preselected from the availability, so only the hour is left.
+      await _tapLabel(tester, '10:00');
+      await tester.pump();
+
       expect(find.text('--'), findsNothing);
 
+      await _tapLabel(tester, 'Confirmar cita', settle: AppMotion.press);
+      // Drains `AppTick`'s draw timer. A bare `pump()` leaves it pending and
+      // the test fails on a timer rather than on the assertion — the confirmed
+      // bar mounts an `AppTick` the moment the booking lands.
+      await tester.pump(AppMotion.tickDrawDelay + AppMotion.tickDraw);
+
+      // 10:00 is scheduleId 103 in the fixture. Booking 2 (its index) or 101
+      // (the first row) would both be a patient sent to the wrong slot.
+      expect(fakes.booking.lastBookedScheduleId, 103);
+    });
+
+    testWidgets('the confirmed pill shows the ticket the SERVER assigned', (
+      tester,
+    ) async {
+      await pumpApp(tester, const BookingScreen());
+      await tester.pump();
+
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
+      await _tapLabel(tester, '09:00');
+      await tester.pump();
       await _tapLabel(tester, 'Confirmar cita', settle: AppMotion.press);
       await tester.pump(AppMotion.tickDrawDelay + AppMotion.tickDraw);
 
       // The CTA is REPLACED, not joined — one control that changed reads as
       // "done"; two controls read as "did it work?".
       expect(find.text('Confirmar cita'), findsNothing);
-      expect(find.text('Reservado / 09:00'), findsOneWidget);
+      // Ticket 7 comes from the fake's booking response, not from the tap.
+      expect(find.text('Reservado / turno 7'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a taken slot cannot be picked', (tester) async {
-      await tester.pumpWidget(_host(const BookingScreen()));
+    testWidgets('a booking that fails does NOT show the confirmed pill', (
+      tester,
+    ) async {
+      fakes.booking.bookResult = const Left<Failure, Appointment>(
+        ValidationFailure(message: 'Ese cupo ya fue tomado.'),
+      );
+
+      await pumpApp(tester, const BookingScreen());
       await tester.pump();
 
-      await _tapLabel(tester, 'Dr(a). [APELLIDO 1]');
-      await _tapLabel(tester, '12', settle: AppMotion.tone);
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
+      await _tapLabel(tester, '09:00');
+      await tester.pump();
+      await _tapLabel(tester, 'Confirmar cita', settle: AppMotion.press);
+      await tester.pump();
 
-      // 08:40 is struck through in the board's own data.
+      // This is the whole reason the confirmation waits for the server.
+      expect(find.textContaining('Reservado'), findsNothing);
+      expect(find.text('Ese cupo ya fue tomado.'), findsOneWidget);
+    });
+
+    testWidgets('a taken slot cannot be picked', (tester) async {
+      await pumpApp(tester, const BookingScreen());
+      await tester.pump();
+
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
+
+      // 08:40 is taken in the fixture, so it renders struck through.
       await _tapLabel(tester, '08:40', warnIfMissed: false);
+      await tester.pump();
 
       // Hora is still unanswered, so the CTA is still inert.
       expect(find.text('--'), findsOneWidget);
     });
 
-    testWidgets('changing a selection invalidates a confirmed booking', (
+    testWidgets('changing the doctor invalidates a confirmed booking', (
       tester,
     ) async {
-      await tester.pumpWidget(_host(const BookingScreen()));
+      await pumpApp(tester, const BookingScreen());
       await tester.pump();
 
-      await _tapLabel(tester, 'Dr(a). [APELLIDO 1]');
-      await _tapLabel(tester, '12', settle: AppMotion.tone);
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
       await _tapLabel(tester, '09:00');
+      await tester.pump();
       await _tapLabel(tester, 'Confirmar cita', settle: AppMotion.press);
       await tester.pump(AppMotion.tickDrawDelay + AppMotion.tickDraw);
 
-      expect(find.text('Reservado / 09:00'), findsOneWidget);
+      expect(find.text('Reservado / turno 7'), findsOneWidget);
 
-      // Pick a different hour: the confirmation must NOT keep claiming a time
-      // the user has moved away from.
-      await _tapLabel(tester, '10:00');
+      // A different doctor means different slots. The confirmation must NOT
+      // keep claiming a booking the patient has moved away from.
+      await _tapLabel(tester, 'Luis Mora / Cardiologia');
+      await tester.pump();
 
-      expect(find.text('Reservado / 09:00'), findsNothing);
+      expect(find.textContaining('Reservado'), findsNothing);
       expect(find.text('Confirmar cita'), findsOneWidget);
+    });
+
+    testWidgets('no availability says so instead of showing an empty grid', (
+      tester,
+    ) async {
+      fakes.booking.availabilityResult = const Right<Failure, BookingAvailability>(
+        BookingAvailability.empty(),
+      );
+
+      await pumpApp(tester, const BookingScreen());
+      await tester.pump();
+
+      await _tapLabel(tester, 'Ana Torres / Pediatria');
+      await tester.pump();
+
+      expect(find.textContaining('no tiene cupos libres'), findsOneWidget);
+    });
+
+    testWidgets('a clinic with no services cannot start, and says which', (
+      tester,
+    ) async {
+      fakes.booking.optionsResult = Right<Failure, BookingOptions>(
+        BookingOptions(doctors: testDoctors, services: const <BookingService>[]),
+      );
+
+      await pumpApp(tester, const BookingScreen());
+      await tester.pump();
+
+      expect(find.textContaining('tipos de consulta'), findsOneWidget);
+      expect(find.text('1 / MEDICO'), findsNothing);
+    });
+  });
+
+  group('AppointmentsScreen', () {
+    late HomeFakes fakes;
+    setUp(() => fakes = setUpHomeDependencies());
+
+    testWidgets('lists the upcoming appointments the server returned', (
+      tester,
+    ) async {
+      fakes.appointments.results[AppointmentScope.upcoming] =
+          Right<Failure, AppointmentPage>(
+            AppointmentPage(
+              items: testUpcoming,
+              page: 0,
+              isLast: true,
+              totalElements: 2,
+            ),
+          );
+
+      await pumpApp(tester, const AppointmentsScreen());
+      await tester.pump();
+
+      expect(find.text('Pediatria'), findsOneWidget);
+      expect(find.text('Sede Norte'), findsOneWidget);
+      // The second fixture row has no schedule at all — a row the server
+      // really returns. It must still render, with dashes rather than
+      // vanishing: it has a ticket number the patient may be asked for.
+      expect(find.textContaining('Horario por confirmar'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('an EMPTY result offers the way out', (tester) async {
+      await pumpApp(tester, const AppointmentsScreen());
+      await tester.pump();
+
+      expect(find.text('No tienes citas agendadas'), findsOneWidget);
+      expect(find.text('Agendar una cita'), findsOneWidget);
+    });
+
+    testWidgets('a FAILED load never says the patient has no appointments', (
+      tester,
+    ) async {
+      // The single most damaging thing this screen could say. An empty state
+      // after a failed request tells a patient nothing is booked, and they
+      // miss the appointment.
+      fakes.appointments.results[AppointmentScope.upcoming] =
+          const Left<Failure, AppointmentPage>(NetworkFailure());
+
+      await pumpApp(tester, const AppointmentsScreen());
+      await tester.pump();
+
+      expect(find.text('No tienes citas agendadas'), findsNothing);
+      expect(find.text('Reintentar'), findsOneWidget);
     });
   });
 
@@ -268,12 +445,16 @@ void main() {
   });
 
   group('ProfileScreen', () {
-    setUp(setUpAuthDependencies);
+    // The identity card reads the record from the locator now, so the home
+    // half has to be registered as well.
+    late HomeFakes fakes;
+    setUp(() => fakes = setUpHomeDependencies());
 
     testWidgets('shows the three destinations the brief asks for', (
       tester,
     ) async {
       await pumpApp(tester, const ProfileScreen());
+      await tester.pump();
 
       expect(find.text('Mi informacion'), findsOneWidget);
       expect(find.text('Terminos y condiciones'), findsOneWidget);
@@ -284,9 +465,30 @@ void main() {
 
     testWidgets('derives the avatar initials from the name', (tester) async {
       await pumpApp(tester, const ProfileScreen());
+      await tester.pump();
 
-      // '[NOMBRE DEL PACIENTE]' -> brackets stripped -> N + D.
-      expect(find.text('ND'), findsOneWidget);
+      // 'Ana Perez' -> A + P. The name comes from the record the server
+      // returned, not from a placeholder string.
+      expect(find.text('AP'), findsOneWidget);
+      expect(find.text('Ana Perez'), findsOneWidget);
+      expect(find.text('Cedula 1712345678'), findsOneWidget);
+    });
+
+    testWidgets('a failed profile load still leaves the way out reachable', (
+      tester,
+    ) async {
+      // The whole point of not gating the screen on the fetch: a patient with
+      // no connection must still be able to sign out. Gating the list behind
+      // the record would trap them.
+      fakes.patient.profileResult = const Left<Failure, PatientProfile>(
+        NetworkFailure(),
+      );
+
+      await pumpApp(tester, const ProfileScreen());
+      await tester.pump();
+
+      expect(find.text('Cerrar sesion'), findsOneWidget);
+      expect(find.text('Mi informacion'), findsOneWidget);
     });
   });
 

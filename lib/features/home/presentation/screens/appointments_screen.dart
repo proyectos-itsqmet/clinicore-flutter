@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constant/app_icons.dart';
+import '../../../../core/di/injection.dart';
 import '../../../../core/theme/theme.dart';
+import '../../../../shared/helpers/date_labels.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
 import '../../../../shared/ui/molecules/molecules.dart';
+import '../../../auth/presentation/blocs/auth/auth_bloc.dart';
+import '../../domain/entities/appointment.dart';
+import '../../domain/repositories/appointments_repository.dart';
+import '../blocs/appointments/appointments_bloc.dart';
 import '../widgets/appointment_card.dart';
 
 /// The "Mis citas" tab — what is booked.
@@ -14,9 +21,24 @@ import '../widgets/appointment_card.dart';
 /// have to be there?" vs "when was I last seen?") and mixing them makes the
 /// first one harder.
 ///
-/// The empty state is not an afterthought here: a new account has zero
-/// appointments, and an empty tab that shows only background colour reads as
-/// a failed load. It offers the way out — go book one.
+/// ## Two blocs, one per tab
+///
+/// Each list owns an [AppointmentsBloc] fixed to its own scope. A single bloc
+/// that reloaded on every tab change would refetch data it already had every
+/// time the patient looked back and forth, and would show a spinner each time.
+///
+/// They are created HERE rather than by a `BlocProvider`, for two reasons that
+/// are really one: `MultiBlocProvider` cannot hold two providers of the same
+/// type, and the past list should not be fetched until the tab is opened. Owned
+/// by hand means closed by hand — see [dispose].
+///
+/// ## The empty state is shown on `isEmpty`, never on a failure
+///
+/// A new account has zero appointments, and an empty tab that shows only
+/// background colour reads as a failed load — so the empty state offers the way
+/// out. But telling a patient "no tienes citas agendadas" when the REQUEST
+/// failed is the single most damaging thing this screen can say, so a failure
+/// gets its own branch with a retry.
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
 
@@ -27,50 +49,40 @@ class AppointmentsScreen extends StatefulWidget {
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
   static const List<String> _filters = <String>['Proximas', 'Pasadas'];
 
+  late final AppointmentsBloc _upcoming =
+      sl<AppointmentsBloc>(param1: AppointmentScope.upcoming)
+        ..add(const AppointmentsRequested());
+
+  /// Lazily built the first time "Pasadas" is opened: a patient who never taps
+  /// it never pays for that request.
+  AppointmentsBloc? _past;
+
   int _filter = 0;
 
-  /// Sample data, labelled as such below — the same convention the design
-  /// boards use for figures they cannot invent.
-  static const List<AppointmentCard> _upcoming = <AppointmentCard>[
-    AppointmentCard(
-      weekday: 'Mie',
-      day: '12',
-      month: 'nov',
-      specialty: 'Pediatria',
-      doctor: 'Dr(a). [APELLIDO 1]',
-      time: '09:00 / bloque de 30 min',
-      location: 'Sede [NOMBRE]',
-    ),
-    AppointmentCard(
-      weekday: 'Vie',
-      day: '21',
-      month: 'nov',
-      specialty: 'Cardiologia',
-      doctor: 'Dr(a). [APELLIDO 2]',
-      time: '15:20 / bloque de 40 min',
-      location: 'Sede [NOMBRE]',
-      status: AppointmentStatus.pending,
-    ),
-  ];
+  @override
+  void dispose() {
+    _upcoming.close();
+    _past?.close();
+    super.dispose();
+  }
 
-  static const List<AppointmentCard> _past = <AppointmentCard>[
-    AppointmentCard(
-      weekday: 'Lun',
-      day: '06',
-      month: 'oct',
-      specialty: 'Medicina general',
-      doctor: 'Dr(a). [APELLIDO 3]',
-      time: '08:20',
-      location: 'Sede [NOMBRE]',
-      status: AppointmentStatus.attended,
-    ),
-  ];
-
-  List<AppointmentCard> get _visible => _filter == 0 ? _upcoming : _past;
+  void _select(int index) {
+    setState(() {
+      _filter = index;
+      if (index == 1) {
+        _past ??= sl<AppointmentsBloc>(param1: AppointmentScope.past)
+          ..add(const AppointmentsRequested());
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final List<AppointmentCard> items = _visible;
+    final bool upcomingTab = _filter == 0;
+    final AppointmentsBloc bloc = upcomingTab ? _upcoming : _past!;
+    final AppointmentScope scope = upcomingTab
+        ? AppointmentScope.upcoming
+        : AppointmentScope.past;
 
     return SafeArea(
       bottom: false,
@@ -90,33 +102,179 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             AppSegmented(
               options: _filters,
               selectedIndex: _filter,
-              onChanged: (index) => setState(() => _filter = index),
+              onChanged: _select,
             ),
 
-            if (items.isEmpty)
-              AppEmptyState(
-                icon: AppIcons.appointments,
-                title: _filter == 0
-                    ? 'No tienes citas agendadas'
-                    : 'Todavia no tienes citas pasadas',
-                message: _filter == 0
-                    ? 'Cuando reserves un turno lo vas a ver aca, con la '
-                          'hora exacta y la sede.'
-                    : 'Aca van a quedar las consultas que ya pasaron.',
-                actionLabel: _filter == 0 ? 'Agendar una cita' : null,
-                // Switches tabs instead of pushing a route: the booking
-                // screen already exists as a branch, and pushing a second
-                // copy over the shell would hide the nav the user needs.
-                onAction: _filter == 0
-                    ? () => StatefulNavigationShell.of(context).goBranch(0)
-                    : null,
-              )
-            else ...<Widget>[
-              for (final AppointmentCard item in items) item,
-              Text('Datos de ejemplo.', style: AppTypography.cap),
-            ],
+            BlocProvider<AppointmentsBloc>.value(
+              value: bloc,
+              // Keyed by scope so switching tabs rebuilds the subtree instead
+              // of animating one list's state into the other's.
+              child: AppointmentsList(key: ValueKey<AppointmentScope>(scope), scope: scope),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One list of appointments, driven by whichever [AppointmentsBloc] is above it.
+///
+/// Public because "Historial" renders the same list with a different scope.
+class AppointmentsList extends StatelessWidget {
+  const AppointmentsList({super.key, required this.scope, this.emptyState});
+
+  final AppointmentScope scope;
+
+  /// Overrides the default empty copy. "Historial" says something different
+  /// from "Mis citas" about the same absence of rows.
+  final Widget? emptyState;
+
+  bool get _isUpcoming => scope == AppointmentScope.upcoming;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocConsumer<AppointmentsBloc, AppointmentsState>(
+      // A dead token is not this screen's problem to solve. It reports it and
+      // lets the router do what it already knows how to do; showing
+      // "Reintentar" over an expired session would retry forever.
+      listenWhen: (AppointmentsState previous, AppointmentsState current) =>
+          current.isSessionExpired && !previous.isSessionExpired,
+      listener: (BuildContext context, AppointmentsState state) {
+        context.read<AuthBloc>().add(const AuthSessionExpired());
+      },
+      builder: (BuildContext context, AppointmentsState state) {
+        if (state.isFirstLoad) return const _AppointmentsSkeleton();
+
+        if (state.status == AppointmentsStatus.failure) {
+          return _LoadFailure(
+            message: state.failure?.message ?? 'No pudimos cargar tus citas.',
+            onRetry: () => context.read<AppointmentsBloc>().add(
+              const AppointmentsRequested(),
+            ),
+          );
+        }
+
+        if (state.isEmpty) {
+          return emptyState ??
+              AppEmptyState(
+                icon: AppIcons.appointments,
+                title: _isUpcoming
+                    ? 'No tienes citas agendadas'
+                    : 'Todavia no tienes citas pasadas',
+                message: _isUpcoming
+                    ? 'Cuando reserves un turno lo vas a ver aca, con la hora '
+                          'exacta y la sede.'
+                    : 'Aca van a quedar las consultas que ya pasaron.',
+                actionLabel: _isUpcoming ? 'Agendar una cita' : null,
+                // Switches tabs instead of pushing a route: the booking screen
+                // already exists as a branch, and pushing a second copy over
+                // the shell would hide the nav the user needs.
+                onAction: _isUpcoming
+                    ? () => StatefulNavigationShell.of(context).goBranch(0)
+                    : null,
+              );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.section,
+          children: <Widget>[
+            for (final Appointment item in state.items)
+              _AppointmentTile(appointment: item),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Maps one [Appointment] onto the existing card.
+///
+/// The domain has five statuses and the card has four pills, and the collapse
+/// is deliberate: `pending` and `waiting` both read as "por confirmar" to a
+/// patient — the difference between them is where the clinic filed the turn
+/// internally, which is not something a patient can act on.
+class _AppointmentTile extends StatelessWidget {
+  const _AppointmentTile({required this.appointment});
+
+  final Appointment appointment;
+
+  AppointmentStatus get _cardStatus => switch (appointment.status) {
+    TurnStatus.pending || TurnStatus.waiting => AppointmentStatus.pending,
+    TurnStatus.inTreatment => AppointmentStatus.confirmed,
+    TurnStatus.treated => AppointmentStatus.attended,
+    TurnStatus.cancelled => AppointmentStatus.cancelled,
+    // An unrecognised status shows as confirmed rather than hiding the row:
+    // the appointment exists, and dropping it would be worse than a pill that
+    // is merely imprecise.
+    TurnStatus.unknown => AppointmentStatus.confirmed,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final DateTime? date = appointment.date;
+
+    return AppointmentCard(
+      // A turn whose schedule was deleted is a real row the server returns.
+      // Em dashes rather than a hidden card: the appointment is still the
+      // patient's, and it still has a ticket number they may be asked for.
+      weekday: date == null ? '—' : weekdayLabel(date),
+      day: date == null ? '—' : dayLabel(date),
+      month: date == null ? '' : monthLabel(date),
+      specialty:
+          appointment.speciality ?? appointment.serviceName ?? 'Consulta',
+      doctor: appointment.doctorName ?? 'Por asignar',
+      time: appointment.time == null
+          ? 'Horario por confirmar'
+          : '${appointment.time} / turno ${appointment.ticket}',
+      location: appointment.locationName ?? 'Sede por confirmar',
+      status: _cardStatus,
+    );
+  }
+}
+
+/// Reserves the real geometry of two cards while the first load runs.
+class _AppointmentsSkeleton extends StatelessWidget {
+  const _AppointmentsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.section,
+      children: <Widget>[
+        AppSkeleton.card(height: 132),
+        AppSkeleton.card(height: 132),
+      ],
+    );
+  }
+}
+
+/// A failed load, with the one action that helps.
+///
+/// Deliberately NOT [AppEmptyState] — see the screen's doc.
+class _LoadFailure extends StatelessWidget {
+  const _LoadFailure({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.cardPad),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.lg,
+        children: <Widget>[
+          Text(message, style: AppTypography.body, textAlign: TextAlign.center),
+          AppButton(
+            label: 'Reintentar',
+            variant: AppButtonVariant.ghost,
+            onPressed: onRetry,
+          ),
+        ],
       ),
     );
   }

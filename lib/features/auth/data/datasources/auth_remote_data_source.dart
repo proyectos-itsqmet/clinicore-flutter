@@ -51,6 +51,18 @@ abstract interface class AuthRemoteDataSource {
     required String cedula,
   });
 
+  /// Registration step 2: checks the mailed code.
+  ///
+  /// Returns a fresh 300-second token carrying `ROLE_REGISTER_VERIFIED`, which
+  /// replaces step 1's `ROLE_OTP_PENDING` one.
+  ///
+  /// Swapping the token is safe for step 3: `/auth/register-patient` has no
+  /// `hasAuthority` matcher in `GlobalConfig` and `completeRegistration` only
+  /// compares `auth.getName()` with the submitted email. Both tokens carry the
+  /// same subject, so the new one still authenticates step 3 — the new
+  /// authority exists so the server CAN start requiring it later.
+  Future<String> verifyRegistrationOtp({required String otp});
+
   Future<RemoteAuthResult> completeRegistration(
     PatientRegistration registration,
   );
@@ -188,11 +200,32 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }
 
   @override
+  Future<String> verifyRegistrationOtp({required String otp}) async {
+    try {
+      final Response<dynamic> response = await _dio.post<dynamic>(
+        ApiEndpoints.verifyOtp,
+        data: VerifyOtpRequestModel(otp: otp).toJson(),
+      );
+
+      final String? token = _tokenFromSetCookie(response);
+      if (token == null) {
+        throw const ServerException(
+          message: 'No pudimos verificar el codigo. Intenta de nuevo.',
+          data: 'missing jwt cookie on auth/verify-otp',
+        );
+      }
+      return token;
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
+  }
+
+  @override
   Future<String> verifyRecoveryOtp({required String otp}) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
         ApiEndpoints.recoverPasswordVerifyOtp,
-        data: VerifyRecoveryOtpRequestModel(otp: otp).toJson(),
+        data: VerifyOtpRequestModel(otp: otp).toJson(),
       );
 
       final String? token = _tokenFromSetCookie(response);
