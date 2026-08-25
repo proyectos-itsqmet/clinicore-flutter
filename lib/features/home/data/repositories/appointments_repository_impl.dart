@@ -5,6 +5,7 @@ import '../../../../core/error/failures.dart';
 import '../../domain/entities/appointment.dart';
 import '../../domain/repositories/appointments_repository.dart';
 import '../datasources/appointments_remote_data_source.dart';
+import '../datasources/turn_updates_remote_data_source.dart';
 import '../models/turn_model.dart';
 
 /// The translation layer for the patient's appointments.
@@ -15,10 +16,17 @@ import '../models/turn_model.dart';
 /// the data source merges several requests, so the union arrives grouped by
 /// status rather than by date. Sorting here means every caller gets a list
 /// that reads in the order the screen shows it.
+///
+/// Two data sources, on purpose: [remote] is Dio/REST, [realtime] is a STOMP
+/// socket, and they do not share an interface because they do not share a
+/// transport — folding a socket subscription into the same interface as
+/// `fetchMyTurns`/`cancelTurn` would mix two different failure and lifecycle
+/// models under one name.
 class AppointmentsRepositoryImpl implements AppointmentsRepository {
-  const AppointmentsRepositoryImpl(this.remote);
+  const AppointmentsRepositoryImpl(this.remote, this.realtime);
 
   final AppointmentsRemoteDataSource remote;
+  final TurnUpdatesRemoteDataSource realtime;
 
   @override
   Future<Either<Failure, AppointmentPage>> getMyAppointments({
@@ -55,6 +63,9 @@ class AppointmentsRepositoryImpl implements AppointmentsRepository {
       return model.toEntity();
     });
   }
+
+  @override
+  Stream<Appointment> watchTurnUpdates() => realtime.watchTurnUpdates();
 
   /// Sorts by day, then by hour within the day.
   ///

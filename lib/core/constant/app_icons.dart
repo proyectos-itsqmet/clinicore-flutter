@@ -83,6 +83,11 @@ abstract final class AppIcons {
   static const IconData emergency = PhosphorIconsRegular.firstAidKit;
   static const IconData location = PhosphorIconsRegular.mapPin;
 
+  /// "Agendar" step 3's "elegir fecha" affordance — a single, PICKED day.
+  /// Distinct from [booking] (calendar-plus: creating something new) and
+  /// [appointments] (calendar-check: something already booked).
+  static const IconData calendar = PhosphorIconsRegular.calendar;
+
   // ==========================================================
   // FEEDBACK AND CHROME
   // ==========================================================

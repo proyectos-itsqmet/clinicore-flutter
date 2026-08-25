@@ -64,3 +64,20 @@ class CancelAppointment implements UseCase<Appointment, int> {
     return _repository.cancelAppointment(turnId);
   }
 }
+
+/// A live feed of the signed-in patient's own turn changes. See
+/// `AppointmentsRepository.watchTurnUpdates` for what it does and does not
+/// guarantee.
+///
+/// Not a [UseCase]: that interface is `Future<Either<Failure, T>>`, shaped
+/// for a one-shot call a bloc can `await` and `fold`. A live stream is
+/// neither — there is no single result, and, deliberately, no failure to
+/// fold: a dropped socket should not resolve into an error state, it should
+/// just stop pushing until it reconnects.
+class WatchTurnUpdates {
+  const WatchTurnUpdates(this._repository);
+
+  final AppointmentsRepository _repository;
+
+  Stream<Appointment> call() => _repository.watchTurnUpdates();
+}

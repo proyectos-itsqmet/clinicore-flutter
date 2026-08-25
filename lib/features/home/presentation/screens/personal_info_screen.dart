@@ -2,15 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/constant/app_icons.dart';
+import '../../../../core/di/injection.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/helpers/date_labels.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
 import '../../../../shared/ui/molecules/molecules.dart';
 import '../../../../shared/ui/organisms/organisms.dart';
+import '../../../auth/presentation/blocs/auth/auth_bloc.dart';
+import '../../domain/entities/coverage.dart';
 import '../../domain/entities/patient_profile.dart';
+import '../blocs/coverage/coverage_bloc.dart';
 import '../blocs/profile/profile_bloc.dart';
 import '../widgets/contact_edit_sheet.dart';
 import '../widgets/profile_scope.dart';
+
+/// What an unset optional field reads as. Not an empty string: a blank value
+/// next to a label looks like a rendering bug. Shared by [_PersonalInfoView]
+/// and [_CoverageSection] — they read from two different blocs, but an
+/// absent value should read the same way regardless of which one it came
+/// from.
+const String _missing = 'Sin registrar';
 
 /// "Mi informacion" — the patient's own data, read-only by default.
 ///
@@ -25,17 +36,22 @@ import '../widgets/profile_scope.dart';
 /// * **Contacto** is editable, because the clinic needs it correct and the
 ///   patient is the only one who knows when it changed. The footer button
 ///   opens [ContactEditSheet].
-/// * **Cobertura** has NO DATA and says so. The tables it needs — `insurers`,
-///   `coverage_plans`, `patient_coverage` — do not exist on the server. It used
-///   to render invented values under a "Datos de ejemplo" label; now that the
-///   two groups above it are real, that label would no longer tell a patient
-///   which half was made up.
+/// * **Cobertura** reads `GET /api/patient-coverages/me` through its own
+///   [CoverageBloc] — a patient may hold several coverages over the years,
+///   but the server guarantees at most one is active at a time, and this
+///   screen never draws a lapsed one with the same weight as the current
+///   one. See `_CoverageSection`.
 class PersonalInfoScreen extends StatelessWidget {
   const PersonalInfoScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const ProfileScope(child: _PersonalInfoView());
+    return ProfileScope(
+      child: BlocProvider<CoverageBloc>(
+        create: (_) => sl<CoverageBloc>()..add(const CoverageRequested()),
+        child: const _PersonalInfoView(),
+      ),
+    );
   }
 }
 
@@ -44,101 +60,109 @@ class _PersonalInfoView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<ProfileBloc, ProfileState>(
-      listenWhen: (ProfileState previous, ProfileState current) =>
-          previous.status != current.status &&
-          current.status == ProfileStatus.saved,
-      listener: (BuildContext context, ProfileState state) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Datos de contacto actualizados.')),
-        );
+    // A session dying while this screen is open is [CoverageBloc]'s problem
+    // to REPORT, never to solve — same rule `ProfileScope` already applies to
+    // [ProfileBloc]. Both blocs forward independently: neither knows the
+    // other exists.
+    return BlocListener<CoverageBloc, CoverageState>(
+      listenWhen: (CoverageState previous, CoverageState current) =>
+          current.isSessionExpired && !previous.isSessionExpired,
+      listener: (BuildContext context, CoverageState state) {
+        context.read<AuthBloc>().add(const AuthSessionExpired());
       },
-      builder: (BuildContext context, ProfileState state) {
-        final PatientProfile? profile = state.profile;
+      child: BlocConsumer<ProfileBloc, ProfileState>(
+        listenWhen: (ProfileState previous, ProfileState current) =>
+            previous.status != current.status &&
+            current.status == ProfileStatus.saved,
+        listener: (BuildContext context, ProfileState state) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Datos de contacto actualizados.')),
+          );
+        },
+        builder: (BuildContext context, ProfileState state) {
+          final PatientProfile? profile = state.profile;
 
-        return AppScreen(
-          topBar: AppTopBar(
-            title: 'Mi informacion',
-            onBack: () => Navigator.of(context).pop(),
-          ),
-          // The button is only offered once there is something to edit.
-          // Opening an empty form and posting it would wipe the patient's
-          // contact data with blanks.
-          footer: profile == null
-              ? null
-              : AppButton(
-                  label: 'Editar datos de contacto',
-                  size: AppButtonSize.lg,
-                  fullWidth: true,
-                  leading: const Icon(AppIcons.person),
-                  onPressed: state.isBusy
-                      ? null
-                      : () => ContactEditSheet.show(context, profile),
-                ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: AppSpacing.section,
-            children: <Widget>[
-              const SizedBox(height: AppSpacing.section),
+          return AppScreen(
+            topBar: AppTopBar(
+              title: 'Mi informacion',
+              onBack: () => Navigator.of(context).pop(),
+            ),
+            // The button is only offered once there is something to edit.
+            // Opening an empty form and posting it would wipe the patient's
+            // contact data with blanks.
+            footer: profile == null
+                ? null
+                : AppButton(
+                    label: 'Editar datos de contacto',
+                    size: AppButtonSize.lg,
+                    fullWidth: true,
+                    leading: const Icon(AppIcons.person),
+                    onPressed: state.isBusy
+                        ? null
+                        : () => ContactEditSheet.show(context, profile),
+                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: AppSpacing.section,
+              children: <Widget>[
+                const SizedBox(height: AppSpacing.section),
 
-              if (profile == null)
-                ..._loadingOrError(context, state)
-              else ...<Widget>[
-                _Group(
-                  kicker: 'Identidad',
-                  note:
-                      'Estos datos no se pueden cambiar desde la app: tu '
-                      'historia clinica esta archivada con ellos. Si hay un '
-                      'error, avisanos en recepcion con tu cedula.',
-                  rows: <AppSummaryRow>[
-                    AppSummaryRow(label: 'Nombre', value: profile.fullName),
-                    AppSummaryRow(label: 'Cedula', value: profile.cedula),
-                    AppSummaryRow(
-                      label: 'Fecha de nacimiento',
-                      value: profile.birthday == null
-                          ? _missing
-                          : longDate(profile.birthday!),
-                    ),
-                    AppSummaryRow(
-                      label: 'Sexo',
-                      // An unrecognised enum yields an empty label — showing
-                      // the raw `GENDER_X` would leak the wire format onto a
-                      // patient's screen.
-                      value: profile.gender.label.isEmpty
-                          ? _missing
-                          : profile.gender.label,
-                    ),
-                  ],
-                ),
+                if (profile == null)
+                  ..._loadingOrError(context, state)
+                else ...<Widget>[
+                  _Group(
+                    kicker: 'Identidad',
+                    note:
+                        'Estos datos no se pueden cambiar desde la app: tu '
+                        'historia clinica esta archivada con ellos. Si hay un '
+                        'error, avisanos en recepcion con tu cedula.',
+                    rows: <AppSummaryRow>[
+                      AppSummaryRow(label: 'Nombre', value: profile.fullName),
+                      AppSummaryRow(label: 'Cedula', value: profile.cedula),
+                      AppSummaryRow(
+                        label: 'Fecha de nacimiento',
+                        value: profile.birthday == null
+                            ? _missing
+                            : longDate(profile.birthday!),
+                      ),
+                      AppSummaryRow(
+                        label: 'Sexo',
+                        // An unrecognised enum yields an empty label — showing
+                        // the raw `GENDER_X` would leak the wire format onto a
+                        // patient's screen.
+                        value: profile.gender.label.isEmpty
+                            ? _missing
+                            : profile.gender.label,
+                      ),
+                    ],
+                  ),
 
-                _Group(
-                  kicker: 'Contacto',
-                  rows: <AppSummaryRow>[
-                    AppSummaryRow(label: 'Correo', value: profile.email),
-                    AppSummaryRow(
-                      label: 'Celular',
-                      value: profile.phone ?? _missing,
-                    ),
-                    AppSummaryRow(
-                      label: 'Direccion',
-                      value: profile.address ?? _missing,
-                    ),
-                    AppSummaryRow(
-                      label: 'Contacto de emergencia',
-                      value: profile.emergencyContact ?? _missing,
-                    ),
-                  ],
-                ),
+                  _Group(
+                    kicker: 'Contacto',
+                    rows: <AppSummaryRow>[
+                      AppSummaryRow(label: 'Correo', value: profile.email),
+                      AppSummaryRow(
+                        label: 'Celular',
+                        value: profile.phone ?? _missing,
+                      ),
+                      AppSummaryRow(
+                        label: 'Direccion',
+                        value: profile.address ?? _missing,
+                      ),
+                      AppSummaryRow(
+                        label: 'Contacto de emergencia',
+                        value: profile.emergencyContact ?? _missing,
+                      ),
+                    ],
+                  ),
 
-                // Not a group of empty rows: a card with three "Sin
-                // registrar" lines looks like data the clinic lost. This says
-                // the feature is not built, which is what is true.
-                const _CoverageNotice(),
+                  const _CoverageSection(),
+                ],
               ],
-            ],
-          ),
-        );
-      },
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -175,15 +199,166 @@ class _PersonalInfoView extends StatelessWidget {
       AppSkeleton.card(height: 196),
     ];
   }
-
-  /// What an unset optional field reads as. Not an empty string: a blank value
-  /// next to a label looks like a rendering bug.
-  static const String _missing = 'Sin registrar';
 }
 
-/// Says what Cobertura is, and that it is not available.
-class _CoverageNotice extends StatelessWidget {
-  const _CoverageNotice();
+/// The "Cobertura" group: the active policy in full, past ones as a muted
+/// list, and an honest empty state when there is neither.
+///
+/// This is its own [BlocBuilder] rather than a branch inside
+/// `_PersonalInfoView`'s `ProfileBloc` consumer: coverage and the identity
+/// record load independently, on two different blocs, and a patient whose
+/// profile loaded fine but whose coverage request is still in flight (or
+/// failed) should see the two groups above render immediately rather than
+/// wait on each other.
+class _CoverageSection extends StatelessWidget {
+  const _CoverageSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<CoverageBloc, CoverageState>(
+      builder: (BuildContext context, CoverageState state) {
+        if (state.isFirstLoad) {
+          return const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.lg,
+            children: <Widget>[
+              AppKicker(text: 'Cobertura', size: 11),
+              AppSkeleton.card(height: 140),
+            ],
+          );
+        }
+
+        if (state.status == CoverageStatus.failure && state.coverages.isEmpty) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.lg,
+            children: <Widget>[
+              const AppKicker(text: 'Cobertura', size: 11),
+              AppCard(
+                padding: const EdgeInsets.all(AppSpacing.cardPad),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.lg,
+                  children: <Widget>[
+                    Text(
+                      state.failure?.message ??
+                          'No pudimos cargar tu cobertura.',
+                      style: AppTypography.body,
+                      textAlign: TextAlign.center,
+                    ),
+                    AppButton(
+                      label: 'Reintentar',
+                      variant: AppButtonVariant.ghost,
+                      onPressed: () => context.read<CoverageBloc>().add(
+                        const CoverageRequested(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        final CoverageRecord? active = state.active;
+
+        if (active == null) {
+          return const _NoCoverage();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.lg,
+          children: <Widget>[
+            const AppKicker(text: 'Cobertura', size: 11),
+            AppCard(
+              padding: const EdgeInsets.all(AppSpacing.cardPad),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.lg,
+                children: <Widget>[
+                  Row(
+                    spacing: AppSpacing.md,
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          active.insurerName,
+                          style: AppTypography.h3.copyWith(fontSize: 16),
+                        ),
+                      ),
+                      // The one visual cue that makes an active policy
+                      // impossible to mistake for a lapsed one — see the
+                      // class doc.
+                      const AppPill(
+                        label: 'Activa',
+                        tone: AppPillTone.ok,
+                        dense: true,
+                      ),
+                    ],
+                  ),
+                  const AppHairline(),
+                  AppSummaryRow(label: 'Plan', value: active.planName),
+                  AppSummaryRow(
+                    label: 'Cobertura',
+                    value: '${active.coveragePercentage}%',
+                  ),
+                  AppSummaryRow(
+                    label: 'Poliza',
+                    value: active.policyNumber,
+                  ),
+                  AppSummaryRow(
+                    label: 'Vigente desde',
+                    value: active.validFrom == null
+                        ? _missing
+                        : longDate(active.validFrom!),
+                  ),
+                ],
+              ),
+            ),
+
+            // Past policies, deliberately smaller and muted: a patient
+            // scanning this list must never confuse "Vencida" for "Activa".
+            for (final CoverageRecord past in state.history)
+              AppCard(
+                padding: const EdgeInsets.all(AppSpacing.cardPad),
+                child: Row(
+                  spacing: AppSpacing.md,
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: AppSpacing.xxs,
+                        children: <Widget>[
+                          Text(
+                            '${past.insurerName} - ${past.planName}',
+                            style: AppTypography.meta,
+                          ),
+                          Text(
+                            'Poliza ${past.policyNumber}',
+                            style: AppTypography.cap,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const AppPill(
+                      label: 'Vencida',
+                      tone: AppPillTone.plain,
+                      dense: true,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Shown when the request succeeded and the patient simply has no coverage
+/// on file — a real, valid state, not a missing feature.
+class _NoCoverage extends StatelessWidget {
+  const _NoCoverage();
 
   @override
   Widget build(BuildContext context) {
@@ -201,8 +376,9 @@ class _CoverageNotice extends StatelessWidget {
               const Icon(AppIcons.info, size: 16, color: AppColors.ink3),
               Expanded(
                 child: Text(
-                  'Tu aseguradora y tu plan todavia no estan disponibles en '
-                  'la app. Consultalos en recepcion con tu cedula.',
+                  'Todavia no tenes una cobertura de seguro registrada. Si '
+                  'contas con una aseguradora, avisa en recepcion con tu '
+                  'cedula para que la carguen.',
                   style: AppTypography.cap,
                 ),
               ),

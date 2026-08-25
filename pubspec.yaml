@@ -19,6 +19,15 @@ dependencies:
   # Networking — cliente HTTP
   dio: ^5.11.0
 
+  # Networking — realtime turn updates over STOMP/SockJS.
+  # A plain WebSocket client (e.g. web_socket_channel) speaks frames only;
+  # the backend's /ws-turns endpoint speaks STOMP on top of a SockJS
+  # transport (WebSocketConfig.withSockJS()), so the client needs a package
+  # that understands STOMP framing, not raw bytes. Pulls in `web_socket`
+  # (the small official transport package) as its only runtime dependency.
+  # See features/home/data/datasources/turn_updates_remote_data_source.dart.
+  stomp_dart_client: ^3.0.1
+
   # Storage seguro
   flutter_secure_storage: ^10.3.1
 

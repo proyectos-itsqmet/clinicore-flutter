@@ -48,4 +48,17 @@ abstract interface class AppointmentsRepository {
   /// itself — this is not the client's guarantee to make — and refuses a
   /// turn already attended or cancelled.
   Future<Either<Failure, Appointment>> cancelAppointment(int turnId);
+
+  /// A live feed of the signed-in patient's OWN turn changes, pushed by the
+  /// server the moment one of their turns is created, checked in, called,
+  /// treated, cancelled or reassigned.
+  ///
+  /// Deliberately **not** `Future<Either<Failure, Stream<Appointment>>>` or
+  /// anything that can fold into a failure: this is a best-effort layer ON
+  /// TOP OF [getMyAppointments], never a replacement for it. A dropped
+  /// connection emits nothing rather than an error — [getMyAppointments]
+  /// already has, and keeps, the last good list, and a missed push is
+  /// corrected by the next reconnect or the next manual reload. See
+  /// `TurnUpdatesRemoteDataSource` for how the connection itself recovers.
+  Stream<Appointment> watchTurnUpdates();
 }

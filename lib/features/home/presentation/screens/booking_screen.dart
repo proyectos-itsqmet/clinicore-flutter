@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/constant/app_icons.dart';
 import '../../../../core/di/injection.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/helpers/date_labels.dart';
@@ -9,37 +10,28 @@ import '../../../../shared/ui/molecules/molecules.dart';
 import '../../../auth/presentation/blocs/auth/auth_bloc.dart';
 import '../../domain/entities/appointment.dart';
 import '../../domain/entities/availability.dart';
+import '../../domain/entities/establishment.dart';
 import '../blocs/booking/booking_bloc.dart';
 
-/// The "Agendar" tab — a direct port of the booking widget from
-/// `design/Mobile.dc.html`'s AGENDA DEMO section, now on real availability.
+/// The "Agendar" tab — a step-by-step wizard, one screen per step.
 ///
-/// Three numbered steps (doctor, day, time), then a summary panel that shows
-/// the price before the user commits, then one primary action. The order is the
-/// product's whole argument: "Elige, mira el valor y confirma."
+/// A direct behavioural port of `clinicore-angular`'s `BookingPage`: the same
+/// four steps (Sede, Servicio y Doctor, Horario, Confirmado), the same
+/// forward-only progression, the same "Volver" that can only go BACK, and the
+/// same rule that choosing again at an earlier step clears everything chosen
+/// after it. See [BookingBloc] for where each of those rules actually lives —
+/// this file only renders [BookingState].
 ///
-/// Everything visual comes from the board — the 22px gap between step groups,
-/// the 11px step kickers, the 7px grid gaps, the four-column day and time
-/// grids, and the confirmed state REPLACING the button rather than sitting next
-/// to it.
+/// ## Why a wizard and not the web page's four-tab layout
 ///
-/// ## What changed when the data became real
-///
-/// * **The type switch is services, not three fixed labels.** The board draws
-///   "Consulta / Control / Telemedicina"; the server has a `services` table,
-///   and those are whatever the clinic configured.
-/// * **Days come from the slots.** Only days with at least one FREE slot get a
-///   chip: a day that opens onto a grid of struck-through hours is a tap that
-///   could not lead anywhere.
-/// * **"Con tu plan" is gone.** It needs `insurers` / `coverage_plans` /
-///   `patient_coverage`, and none of those tables exist. What does exist is
-///   `services.discount`, a flat amount off for everyone — so the panel shows
-///   the real price, and a struck-through original only when there is a real
-///   discount. Inventing an insurer price is inventing a number a patient might
-///   budget around.
-/// * **The green "Reservado" bar waits for the server.** The sample version
-///   flipped a local flag on tap. A slot can be taken between the grid loading
-///   and the tap landing, and in a clinic that happens on a Tuesday morning.
+/// The web page keeps all four steps in one component and shows a
+/// numbered-tab header where later tabs are `[disabled]` until reachable.
+/// That header assumes width a phone does not have: four tab labels plus
+/// icons is either a wall of tiny text or four icons with no label at all.
+/// One step per screen, with a single "Volver" line back to the previous
+/// one, is what a checkout flow on a phone already does, and it needs no tab
+/// strip to enforce forward-only progress — there is simply no widget on
+/// screen that skips ahead.
 class BookingScreen extends StatelessWidget {
   const BookingScreen({super.key});
 
@@ -57,388 +49,495 @@ class _BookingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          left: AppSpacing.pad,
-          right: AppSpacing.pad,
-          top: AppSpacing.sectionY * 0.5,
-          // With `extendBody` on the shell, this is the nav bar's height.
-          bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
-        ),
-        child: BlocConsumer<BookingBloc, BookingState>(
-          listenWhen: (BookingState previous, BookingState current) =>
-              current.isSessionExpired && !previous.isSessionExpired,
-          listener: (BuildContext context, BookingState state) {
-            context.read<AuthBloc>().add(const AuthSessionExpired());
-          },
-          builder: (BuildContext context, BookingState state) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: AppSpacing.section,
-              children: <Widget>[
-                const AppSectionHeading(
-                  kicker: 'Agenda en linea',
-                  title: 'Elige, mira el valor y confirma.',
-                ),
-
-                if (state.isFirstLoad)
-                  const AppSkeleton.card(height: 460)
-                else if (state.services.isEmpty || state.doctors.isEmpty)
-                  _CannotStart(state: state)
-                else ...<Widget>[
-                  AppSegmented(
-                    options: state.services
-                        .map((BookingService s) => s.name)
-                        .toList(),
-                    selectedIndex: state.service == null
-                        ? 0
-                        : state.services.indexOf(state.service!),
-                    onChanged: (int index) => context.read<BookingBloc>().add(
-                      BookingServiceSelected(state.services[index]),
+    // Step 1's search box is this feature's first raw `TextField` — every
+    // other home screen only uses `AppButton`/`AppChip`/`AppCard`, which
+    // wrap their OWN `Material` internally. In production this screen sits
+    // inside `HomeScreen`'s `Scaffold`, which already provides one; this
+    // `transparency` Material is what makes the screen correct on its own
+    // too, with no visual change either way.
+    return Material(
+      type: MaterialType.transparency,
+      child: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: AppSpacing.pad,
+            right: AppSpacing.pad,
+            top: AppSpacing.sectionY * 0.5,
+            // With `extendBody` on the shell, this is the nav bar's height.
+            bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
+          ),
+          child: BlocConsumer<BookingBloc, BookingState>(
+            listenWhen: (BookingState previous, BookingState current) =>
+                current.isSessionExpired && !previous.isSessionExpired,
+            listener: (BuildContext context, BookingState state) {
+              context.read<AuthBloc>().add(const AuthSessionExpired());
+            },
+            builder: (BuildContext context, BookingState state) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.section,
+                children: <Widget>[
+                  _WizardHeader(state: state),
+                  switch (state.step) {
+                    BookingStep.establishment => _EstablishmentStep(
+                      state: state,
                     ),
-                  ),
-
-                  _BookingPanel(state: state),
+                    BookingStep.serviceAndDoctor => _ServiceAndDoctorStep(
+                      state: state,
+                    ),
+                    BookingStep.schedule => _ScheduleStep(state: state),
+                    BookingStep.confirmed => _ConfirmedStep(state: state),
+                  },
                 ],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-/// The board's white panel: `border-radius: 26px`, a `line` hairline,
-/// `--shadow-lift-1`, 20px of padding and 22px between step groups.
-class _BookingPanel extends StatelessWidget {
-  const _BookingPanel({required this.state});
+/// The kicker + title every step opens with, plus a "Volver" back into the
+/// previous one — absent on step 1 (nothing behind it) and step 4 (the only
+/// way out of a ticket is "Agendar otro turno", not a step back).
+class _WizardHeader extends StatelessWidget {
+  const _WizardHeader({required this.state});
+
+  final BookingState state;
+
+  static const Map<BookingStep, String> _titles = <BookingStep, String>{
+    BookingStep.establishment: 'Elige tu sede',
+    BookingStep.serviceAndDoctor: 'Servicio y doctor',
+    BookingStep.schedule: 'Elige tu horario',
+    BookingStep.confirmed: 'Turno confirmado',
+  };
+
+  BookingStep? get _backTarget => switch (state.step) {
+    BookingStep.establishment => null,
+    BookingStep.serviceAndDoctor => BookingStep.establishment,
+    BookingStep.schedule => BookingStep.serviceAndDoctor,
+    BookingStep.confirmed => null,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final BookingStep? back = _backTarget;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: AppSpacing.md,
+      children: <Widget>[
+        AppSectionHeading(
+          kicker: 'Paso ${state.step.index + 1} de 4',
+          title: _titles[state.step]!,
+        ),
+        if (back != null)
+          GestureDetector(
+            onTap: () =>
+                context.read<BookingBloc>().add(BookingStepBackRequested(back)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: AppSpacing.xxs,
+              children: <Widget>[
+                const Icon(
+                  AppIcons.chevronLeft,
+                  size: 12,
+                  color: AppColors.blueText,
+                ),
+                Text(
+                  'Volver',
+                  style: AppTypography.cap.copyWith(
+                    color: AppColors.blueText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Step 1: pick a sede, with a text search over the loaded list.
+class _EstablishmentStep extends StatelessWidget {
+  const _EstablishmentStep({required this.state});
+
+  final BookingState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.isFirstLoad) return const AppSkeleton.card(height: 280);
+
+    if (state.status == BookingStatus.failure) {
+      return _StepError(
+        message: state.failure?.message ?? 'No pudimos cargar las sedes.',
+        onRetry: () =>
+            context.read<BookingBloc>().add(const BookingStarted()),
+      );
+    }
+
+    final List<Establishment> visible = state.visibleEstablishments;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.lg,
+      children: <Widget>[
+        AppTextField(
+          label: 'Buscar sede',
+          hint: 'Nombre de la sede',
+          onChanged: (String value) => context.read<BookingBloc>().add(
+            BookingEstablishmentSearchChanged(value),
+          ),
+        ),
+        if (visible.isEmpty)
+          const AppEmptyState(
+            icon: AppIcons.location,
+            title: 'Sin resultados',
+            message: 'No encontramos ninguna sede con ese nombre.',
+          )
+        else
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.md,
+            children: <Widget>[
+              for (final Establishment establishment in visible)
+                AppListRow(
+                  label: establishment.name,
+                  supporting: establishment.address,
+                  icon: AppIcons.location,
+                  onTap: () => context.read<BookingBloc>().add(
+                    BookingEstablishmentSelected(establishment),
+                  ),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Step 2: pick a service and, optionally, a doctor within it.
+class _ServiceAndDoctorStep extends StatelessWidget {
+  const _ServiceAndDoctorStep({required this.state});
+
+  final BookingState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.status == BookingStatus.loadingServices) {
+      return const AppSkeleton.card(height: 280);
+    }
+
+    if (state.status == BookingStatus.failure) {
+      return _StepError(
+        message: state.failure?.message ?? 'No pudimos cargar los servicios.',
+        onRetry: () {
+          final Establishment? establishment = state.establishment;
+          if (establishment == null) return;
+          context.read<BookingBloc>().add(
+            BookingEstablishmentSelected(establishment),
+          );
+        },
+      );
+    }
+
+    if (state.hasNoServices) {
+      return const AppEmptyState(
+        icon: AppIcons.specialty,
+        title: 'Sin servicios',
+        message: 'Esta sede todavia no tiene servicios habilitados.',
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.lg,
+      children: <Widget>[
+        for (final ServiceWithDoctors offer in state.servicesWithDoctors)
+          _ServiceCard(offer: offer),
+      ],
+    );
+  }
+}
+
+/// One service: its price, the doctors named for it, and "cualquier doctor
+/// disponible" for when the patient does not care who they see.
+class _ServiceCard extends StatelessWidget {
+  const _ServiceCard({required this.offer});
+
+  final ServiceWithDoctors offer;
+
+  /// `USD 30`, matching the rest of the app. No decimals: every price in the
+  /// catalogue is whole dollars.
+  String _money(double value) => 'USD ${value.toStringAsFixed(0)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final BookingBloc bloc = context.read<BookingBloc>();
+    final BookingService service = offer.service;
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.cardPad),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.md,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  service.name,
+                  style: AppTypography.h3.copyWith(fontSize: 16),
+                ),
+              ),
+              Text(
+                _money(service.hasDiscount ? service.finalPrice : service.price),
+                style: AppTypography.meta.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          for (final BookingDoctor doctor in offer.doctors)
+            AppListRow(
+              label: doctor.fullName,
+              supporting: doctor.speciality,
+              icon: AppIcons.specialty,
+              onTap: () => bloc.add(
+                BookingServiceAndDoctorSelected(service, doctor),
+              ),
+            ),
+          AppButton(
+            // Names the SERVICE, not just "cualquier doctor": with more
+            // than one service card on screen, an unqualified label would
+            // be the one tappable string a test (or a patient scanning the
+            // screen) cannot tell apart from its sibling.
+            label: 'Cualquier doctor para ${service.name}',
+            variant: AppButtonVariant.ghost,
+            fullWidth: true,
+            onPressed: () =>
+                bloc.add(BookingServiceAndDoctorSelected(service, null)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Step 3: pick a FREE slot, with a quick date filter above the list.
+class _ScheduleStep extends StatelessWidget {
+  const _ScheduleStep({required this.state});
 
   final BookingState state;
 
   @override
   Widget build(BuildContext context) {
     final BookingBloc bloc = context.read<BookingBloc>();
-    final List<DateTime> days = state.bookableDays;
-    final List<BookingSlot> slots = state.slotsForDay;
-    final bool loadingSlots = state.status == BookingStatus.loadingSlots;
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.cardPadLg),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: AppColors.line),
-        boxShadow: AppShadows.lift1,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 22,
-        children: <Widget>[
-          _Step(
-            label: '1 / Medico',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: AppSpacing.sm,
-              children: <Widget>[
-                for (final BookingDoctor doctor in state.doctors)
-                  AppChip(
-                    label: doctor.chipLabel,
-                    selected: state.doctor == doctor,
-                    expand: true,
-                    onTap: () => bloc.add(BookingDoctorSelected(doctor)),
-                  ),
-              ],
-            ),
-          ),
-
-          _Step(
-            label: '2 / Dia',
-            // Three different empty grids that mean three different things.
-            // Showing the same blank for all of them is how a patient concludes
-            // there are no appointments when they simply have not picked a
-            // doctor yet.
-            note: !state.hasPair
-                ? 'Elegi un medico para ver los dias disponibles.'
-                : state.hasNoAvailability
-                ? 'Este medico no tiene cupos libres en los proximos 60 dias.'
-                : null,
-            child: loadingSlots
-                ? const AppSkeleton.card(height: 64)
-                : _Grid(
-                    children: <Widget>[
-                      for (final DateTime day in days)
-                        AppDayChip(
-                          weekday: weekdayLabel(day),
-                          day: dayLabel(day),
-                          selected: state.day == day,
-                          onTap: () => bloc.add(BookingDaySelected(day)),
-                        ),
-                    ],
-                  ),
-          ),
-
-          _Step(
-            label: '3 / Hora',
-            note: slots.isEmpty
-                ? null
-                : 'Los cupos tachados ya estan ocupados.',
-            child: loadingSlots
-                ? const AppSkeleton.card(height: 100)
-                : _Grid(
-                    children: <Widget>[
-                      for (final BookingSlot slot in slots)
-                        AppChip(
-                          label: slot.time,
-                          selected: state.slot == slot,
-                          disabled: !slot.isFree,
-                          onTap: () => bloc.add(BookingSlotSelected(slot)),
-                        ),
-                    ],
-                  ),
-          ),
-
-          _SummaryPanel(state: state),
-        ],
-      ),
-    );
-  }
-}
-
-/// One numbered step: an 11px kicker, its control, and an optional note.
-class _Step extends StatelessWidget {
-  const _Step({required this.label, required this.child, this.note});
-
-  final String label;
-  final Widget child;
-  final String? note;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: AppSpacing.md,
-      children: <Widget>[
-        AppKicker(text: label, size: 11),
-        child,
-        if (note != null) Text(note!, style: AppTypography.cap),
-      ],
-    );
-  }
-}
-
-/// The board's `grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px`.
-///
-/// A [Wrap] would let a row of three sit at its natural width and break the
-/// column alignment between the day grid and the time grid, so this stays a
-/// real four-column grid.
-class _Grid extends StatelessWidget {
-  const _Grid({required this.children});
-
-  final List<Widget> children;
-
-  static const int _columns = 4;
-  static const double _gap = AppSpacing.sm;
-
-  @override
-  Widget build(BuildContext context) {
-    if (children.isEmpty) return const SizedBox.shrink();
-
-    final List<Widget> rows = <Widget>[];
-
-    for (int i = 0; i < children.length; i += _columns) {
-      final int end = (i + _columns).clamp(0, children.length);
-      final List<Widget> cells = children.sublist(i, end);
-      rows.add(
-        Row(
-          spacing: _gap,
-          children: <Widget>[
-            for (final Widget cell in cells) Expanded(child: cell),
-            // Keeps a short final row's cells the same width as the rest,
-            // instead of stretching them across the whole panel.
-            for (int j = cells.length; j < _columns; j++)
-              const Expanded(child: SizedBox.shrink()),
-          ],
-        ),
-      );
-    }
-
-    return Column(spacing: _gap, children: rows);
-  }
-}
-
-/// The nested summary: the field-toned panel inside the white one.
-///
-/// It uses [AppRadii.signatureSm] (`20px 20px 8px 20px`), which is the
-/// signature corner at panel scale — the board nests the shape inside itself
-/// rather than switching to a plain rectangle.
-class _SummaryPanel extends StatelessWidget {
-  const _SummaryPanel({required this.state});
-
-  final BookingState state;
-
-  static const String _blank = '--';
-
-  @override
-  Widget build(BuildContext context) {
-    final BookingService? service = state.service;
-    final bool booked = state.status == BookingStatus.booked;
+    final bool loading = state.status == BookingStatus.loadingSchedules;
     final bool booking = state.status == BookingStatus.booking;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.cardPad),
-      decoration: BoxDecoration(
-        color: AppColors.field,
-        borderRadius: AppRadii.signatureSm,
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: AppSpacing.xl,
-        children: <Widget>[
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.lg,
+      children: <Widget>[
+        _SelectionRecap(state: state),
+        _DateFilterBar(current: state.dateFilter),
+
+        // A booking failure is reported HERE, next to the list it happened
+        // on — never a snackbar that slides away before it is read, and
+        // never a reason to lose the schedule, the doctor or the service
+        // already chosen.
+        if (state.status == BookingStatus.failure && state.failure != null)
+          Text(
+            state.failure!.message,
+            style: AppTypography.cap.copyWith(color: AppColors.emergency),
+          ),
+
+        if (loading)
+          const AppSkeleton.card(height: 160)
+        else if (state.hasNoSchedules)
+          const AppEmptyState(
+            icon: AppIcons.calendar,
+            title: 'Sin horarios libres',
+            message:
+                'No hay cupos disponibles para estos filtros. Proba otra '
+                'fecha o otro servicio.',
+          )
+        else
           Column(
-            spacing: AppSpacing.md,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.sm,
             children: <Widget>[
-              AppSummaryRow(
-                label: 'Medico',
-                value: state.doctor?.fullName ?? _blank,
-              ),
-              AppSummaryRow(
-                label: 'Dia',
-                value: state.day == null
-                    ? _blank
-                    : '${weekdayLabel(state.day!)} ${dayLabel(state.day!)} '
-                          '${monthLabel(state.day!)}',
-              ),
-              AppSummaryRow(
-                label: 'Hora',
-                value: state.slot?.time ?? _blank,
-                valueColor: state.isComplete ? AppColors.blueText : null,
-              ),
+              for (final BookingSlot slot in state.schedules)
+                AppChip(
+                  // With no date filter, a chip can be any upcoming day, so
+                  // the date has to be on the label — otherwise two 09:00
+                  // chips a week apart would read as one duplicated slot.
+                  label: state.dateFilter == null
+                      ? '${shortDate(slot.date)} ${slot.time}'
+                      : slot.time,
+                  selected: state.schedule == slot,
+                  expand: true,
+                  onTap: () => bloc.add(BookingScheduleSelected(slot)),
+                ),
             ],
           ),
 
-          const AppHairline(),
+        if (state.schedule != null)
+          AppButton(
+            label: booking ? 'Reservando...' : 'Confirmar turno',
+            fullWidth: true,
+            onPressed: !booking
+                ? () => bloc.add(const BookingConfirmed())
+                : null,
+          ),
+      ],
+    );
+  }
+}
 
-          if (service != null) _PriceRows(service: service),
+/// Sede / Servicio / Doctor, read back to the patient above the slot list —
+/// step 3 is the first screen where all three are decided at once, so it is
+/// the one place worth confirming them before asking for a fourth.
+class _SelectionRecap extends StatelessWidget {
+  const _SelectionRecap({required this.state});
 
-          // A booking that failed is reported here, next to the button that
-          // failed — not as a snackbar that slides away before it is read.
-          if (state.status == BookingStatus.failure && state.failure != null)
-            Text(
-              state.failure!.message,
-              style: AppTypography.cap.copyWith(color: AppColors.emergency),
-            ),
+  final BookingState state;
 
-          if (booked && state.booked != null)
-            _ConfirmedBar(appointment: state.booked!)
-          else
-            AppButton(
-              label: booking ? 'Reservando...' : 'Confirmar cita',
-              fullWidth: true,
-              // Disabled until all three steps are answered — the summary
-              // above already shows exactly which one is still `--`.
-              onPressed: state.isComplete && !state.isBusy
-                  ? () => context.read<BookingBloc>().add(
-                      const BookingConfirmed(),
-                    )
-                  : null,
-            ),
+  static const String _anyDoctor = 'Cualquier doctor';
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tone: AppCardTone.field,
+      padding: const EdgeInsets.all(AppSpacing.cardPadSm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.xs,
+        children: <Widget>[
+          AppSummaryRow(
+            label: 'Sede',
+            value: state.establishment?.name ?? '--',
+          ),
+          AppSummaryRow(label: 'Servicio', value: state.service?.name ?? '--'),
+          AppSummaryRow(
+            label: 'Doctor',
+            value: state.doctor?.fullName ?? _anyDoctor,
+          ),
         ],
       ),
     );
   }
 }
 
-/// The price, and only the prices that exist.
-///
-/// The board's struck-through "list price" over a lower "Con tu plan" needs
-/// coverage tables the server does not have. `services.discount` does exist —
-/// a flat amount off for everyone — so the struck-through row appears ONLY when
-/// there is a real discount, and it is labelled as one.
-class _PriceRows extends StatelessWidget {
-  const _PriceRows({required this.service});
+/// "Todos" / "Hoy" / "Manana" / a picked day — mirrors
+/// `setTodayFilter`/`setTomorrowFilter`/`clearDateFilter`/`onDateChange`.
+/// "Hoy" and "Manana" are resolved to a concrete midnight [DateTime] HERE,
+/// in the widget: [BookingBloc] takes whatever [DateTime] it is given and
+/// never calls `DateTime.now()` itself.
+class _DateFilterBar extends StatelessWidget {
+  const _DateFilterBar({required this.current});
 
-  final BookingService service;
+  final DateTime? current;
 
-  /// `USD 30`, matching the board. No decimals: every price in the catalogue is
-  /// whole dollars, and `USD 30.00` is two characters of noise in a summary row.
-  String _money(double value) => 'USD ${value.toStringAsFixed(0)}';
+  static DateTime _midnight(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  static bool _isSameDay(DateTime? a, DateTime b) =>
+      a != null && a.year == b.year && a.month == b.month && a.day == b.day;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: AppSpacing.md,
-      children: <Widget>[
-        if (service.hasDiscount) ...<Widget>[
-          AppSummaryRow(
-            label: service.name,
-            value: _money(service.price),
-            strikethrough: true,
-          ),
-          AppSummaryRow(
-            label: 'Con descuento',
-            value: _money(service.finalPrice),
-            emphasis: AppFigure(
-              value: _money(service.finalPrice),
-              size: 24,
-              color: AppColors.ok,
-            ),
-          ),
-        ] else
-          AppSummaryRow(
-            label: service.name,
-            value: _money(service.price),
-            emphasis: AppFigure(value: _money(service.price), size: 24),
-          ),
+    final BookingBloc bloc = context.read<BookingBloc>();
+    final DateTime today = _midnight(DateTime.now());
+    final DateTime tomorrow = today.add(const Duration(days: 1));
 
-        Text(
-          'Valor referencial. La cobertura de tu seguro se aplica en '
-          'recepcion.',
-          style: AppTypography.cap,
+    return Row(
+      spacing: AppSpacing.sm,
+      children: <Widget>[
+        Expanded(
+          child: AppChip(
+            label: 'Todos',
+            selected: current == null,
+            onTap: () =>
+                bloc.add(const BookingDateFilterChanged(null)),
+          ),
+        ),
+        Expanded(
+          child: AppChip(
+            label: 'Hoy',
+            selected: _isSameDay(current, today),
+            onTap: () => bloc.add(BookingDateFilterChanged(today)),
+          ),
+        ),
+        Expanded(
+          child: AppChip(
+            label: 'Manana',
+            selected: _isSameDay(current, tomorrow),
+            onTap: () => bloc.add(BookingDateFilterChanged(tomorrow)),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Elegir fecha',
+          onPressed: () async {
+            final DateTime? picked = await showDatePicker(
+              context: context,
+              initialDate: current ?? today,
+              firstDate: today,
+              lastDate: today.add(const Duration(days: 180)),
+            );
+            if (picked == null) return;
+            bloc.add(BookingDateFilterChanged(_midnight(picked)));
+          },
+          icon: const Icon(AppIcons.calendar, size: 20),
+          color: AppColors.ink2,
         ),
       ],
     );
   }
 }
 
-/// The confirmed state: the board's green pill, replacing the button.
-///
-/// It replaces rather than joins the CTA on purpose. Two controls where there
-/// was one reads as "did it work?"; one control that changed reads as "done".
-///
-/// It shows the TICKET number the server assigned, not just the hour. That
-/// number is what gets called in the waiting room, so it is the one thing worth
-/// remembering out of this whole flow.
-class _ConfirmedBar extends StatelessWidget {
-  const _ConfirmedBar({required this.appointment});
+/// Step 4: the confirmed ticket.
+class _ConfirmedStep extends StatelessWidget {
+  const _ConfirmedStep({required this.state});
 
-  final Appointment appointment;
+  final BookingState state;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 54),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPad),
-      decoration: const BoxDecoration(
-        color: AppColors.ok,
-        borderRadius: AppRadii.pillAll,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: AppSpacing.md,
+    final Appointment? appointment = state.booked;
+    // Only reachable once the server actually confirmed — see
+    // `BookingBloc._onConfirmed`, which is the only place `step` becomes
+    // `confirmed`, always alongside `booked`.
+    if (appointment == null) return const SizedBox.shrink();
+
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.cardPadLg),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        spacing: AppSpacing.lg,
         children: <Widget>[
           const AppTick(),
+          Text('Turno reservado', style: AppTypography.h3),
           Text(
-            'Reservado / turno ${appointment.ticket}',
-            style: AppTypography.pill.copyWith(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: AppColors.surface,
+            'Numero de turno: ${appointment.ticket}',
+            style: AppTypography.body,
+            textAlign: TextAlign.center,
+          ),
+          if (appointment.date != null)
+            Text(
+              '${shortDate(appointment.date!)}'
+              '${appointment.time == null ? '' : ' - ${appointment.time}'}',
+              style: AppTypography.body,
+              textAlign: TextAlign.center,
             ),
+          AppButton(
+            label: 'Agendar otro turno',
+            fullWidth: true,
+            onPressed: () =>
+                context.read<BookingBloc>().add(const BookingReset()),
           ),
         ],
       ),
@@ -446,40 +545,21 @@ class _ConfirmedBar extends StatelessWidget {
   }
 }
 
-/// The flow cannot start: the clinic has no doctors or no services configured.
-///
-/// Says WHICH, because "no hay turnos" sends the patient to phone reception
-/// about the wrong thing.
-class _CannotStart extends StatelessWidget {
-  const _CannotStart({required this.state});
+/// A step that failed to load, with the way back in.
+class _StepError extends StatelessWidget {
+  const _StepError({required this.message, required this.onRetry});
 
-  final BookingState state;
+  final String message;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final String message = state.status == BookingStatus.failure
-        ? state.failure?.message ?? 'No pudimos cargar la agenda.'
-        : state.services.isEmpty
-        ? 'La clinica todavia no publico los tipos de consulta. '
-              'Comunicate con recepcion para agendar.'
-        : 'La clinica todavia no publico su cuerpo medico en la app. '
-              'Comunicate con recepcion para agendar.';
-
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.cardPad),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: AppSpacing.lg,
-        children: <Widget>[
-          Text(message, style: AppTypography.body, textAlign: TextAlign.center),
-          AppButton(
-            label: 'Reintentar',
-            variant: AppButtonVariant.ghost,
-            onPressed: () =>
-                context.read<BookingBloc>().add(const BookingStarted()),
-          ),
-        ],
-      ),
+    return AppEmptyState(
+      icon: AppIcons.warning,
+      title: 'Algo salio mal',
+      message: message,
+      actionLabel: 'Reintentar',
+      onAction: onRetry,
     );
   }
 }

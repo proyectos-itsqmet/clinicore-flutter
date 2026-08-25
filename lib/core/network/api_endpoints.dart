@@ -234,30 +234,133 @@ abstract final class ApiEndpoints {
   static String turnCancelled(int turnId) => '$_turns/$turnId/cancelled';
 
   // ==========================================================
+  // CLINICAL HISTORY — encounters and prescriptions
+  // ==========================================================
+
+  /// No class-level `@RequestMapping` on `EncounterController`: routes span
+  /// two resource roots (`/api/encounters/**` and the staff sub-resource
+  /// `/api/patients/{patientId}/encounters`).
+  static const String _encounters = '/api/encounters';
+
+  /// `GET /api/encounters/me` — every documented visit for the signed-in
+  /// patient, paginated. Same "/me" idiom as [turnsMe]: the server resolves
+  /// the patient from the token, not from a parameter —
+  /// `EncounterController.getMyHistory`.
+  ///
+  /// **This read is audited.** `EncounterService.getMyHistory` writes a
+  /// `ClinicalAccessLog` row on every call — see `HistoryBloc`'s class doc
+  /// for why it is only ever requested on screen entry and on an explicit
+  /// pull-to-refresh, never from a rebuild.
+  ///
+  /// 200 body: a Spring `Page<EncounterDTO>`.
+  static const String encountersMe = '$_encounters/me';
+
+  /// No class-level `@RequestMapping` on `PrescriptionController`; same
+  /// two-root shape as [_encounters].
+  static const String _prescriptions = '/api/prescriptions';
+
+  /// `GET /api/prescriptions/me` — every prescription issued to the
+  /// signed-in patient, across every encounter, paginated. Also audited —
+  /// see [encountersMe]. `PrescriptionController.getMyPrescriptions`.
+  ///
+  /// 200 body: a Spring `Page<PrescriptionDTO>`, each item carrying its own
+  /// `items: PrescriptionItemDTO[]` — one row per medication, never a single
+  /// free-text block. A `Prescription` has no `PUT`/`DELETE` anywhere in
+  /// this API: once issued it is immutable.
+  static const String prescriptionsMe = '$_prescriptions/me';
+
+  // ==========================================================
+  // COVERAGE — insurance
+  // ==========================================================
+
+  /// No class-level `@RequestMapping` on `PatientCoverageController`; same
+  /// two-root shape as [_encounters].
+  static const String _patientCoverages = '/api/patient-coverages';
+
+  /// `GET /api/patient-coverages/me` — every coverage policy the signed-in
+  /// patient has held, most recent first. NOT audited — coverage is billing
+  /// data, not a clinical record, and `PatientCoverageService` never touches
+  /// `ClinicalAccessLogService`.
+  ///
+  /// 200 body: `List<PatientCoverageDTO>` — a plain JSON array, NOT a Spring
+  /// `Page` envelope like [encountersMe]/[prescriptionsMe]. At most one
+  /// entry has `active: true` — `PatientCoverageService` deactivates every
+  /// other record for the patient on save.
+  static const String patientCoveragesMe = '$_patientCoverages/me';
+
+  /// `GET /api/patient-coverages/me/quote?servicioId=X` — what the
+  /// signed-in patient would pay for that service right now, using their
+  /// currently active coverage if any. Degrades to `hasCoverage: false`
+  /// rather than an error when there is none —
+  /// `PatientCoverageService.quoteForPatient`.
+  ///
+  /// **Not wired to any screen in this app yet** — see the apply report for
+  /// why the booking wizard does not call it tonight. Listed here anyway,
+  /// per this file's own rule: a real, working route that nothing calls yet
+  /// is worth writing down so the next person does not have to re-read the
+  /// controller to find it.
+  static String patientCoverageQuote(int servicioId) =>
+      '$_patientCoverages/me/quote?servicioId=$servicioId';
+
+  // ==========================================================
   // AVAILABILITY — what "Agendar" is built from
   // ==========================================================
 
   /// `GET /api/schedules` — bookable slots, WITH FILTERS.
   ///
-  /// Query: `doctorId` (UUID), `serviceId`, `stablishmentId`, `from`, `to`
-  /// (ISO `yyyy-MM-dd`), `status`, plus `page` / `size`. All optional; with
-  /// none of them it behaves like the old unfiltered listing, so nothing that
-  /// called it before changed.
+  /// Query: `doctorId` (UUID), `doctorName`, `serviceId`, `stablishmentId`,
+  /// `date` (one exact day), `from` / `to` (a range, ISO `yyyy-MM-dd`),
+  /// `status`, plus `page` / `size`. All optional; with none of them it
+  /// behaves like the old unfiltered listing, so nothing that called it
+  /// before changed. `ScheduleController.getAll` (`Backend_QMS`).
   ///
-  /// The filters landed 2026-08-24 and they are what makes the three steps of
-  /// "Agendar" possible: `doctorId` + `serviceId` + `status=STATUS_FREE`
-  /// yields the distinct dates (step 2) and the hours of each date (step 3).
+  /// The filters landed 2026-08-24 and they are what makes step 3 of
+  /// "Agendar" possible server-side: `serviceId` + `stablishmentId` +
+  /// `status=STATUS_FREE`, optionally narrowed by `doctorId` and/or `date`.
   ///
-  /// **Ask for a big `size`.** The default page is 10, and a week of 20-minute
-  /// slots is far more than that — a day grid built from page 0 silently
-  /// misses the afternoon.
+  /// **This is the endpoint to call for step 3 — not the nested
+  /// `/api/services/{id}/schedules` `clinicore-angular` uses.** That one
+  /// (`ServicioController.getSchedulesByService`) has no `doctorId`
+  /// parameter at all, which is why the web page fetches a page and filters
+  /// by doctor CLIENT-SIDE — invisible past whatever `size` it asked for.
+  /// This endpoint filters by doctor on the server.
+  ///
+  /// **Ask for a big `size`.** The default page is 10, and a week of
+  /// 20-minute slots is far more than that — a list built from page 0
+  /// silently misses the rest.
   static const String schedules = '/api/schedules';
 
-  /// `GET /api/doctors` — step 1 of "Agendar". Paginated.
+  /// `GET /api/doctors` — every doctor in the system. Paginated. Kept for
+  /// completeness; "Agendar" reaches doctors through [serviceDoctors]
+  /// instead, since step 2 needs them scoped to the chosen service.
   static const String doctors = '/api/doctors';
 
-  /// `GET /api/services` — the consultation types. Paginated.
+  /// `GET /api/services` — the consultation types, unscoped. Paginated. Kept
+  /// for completeness; "Agendar" reaches services through
+  /// [stablishmentServices] instead, since step 2 needs them scoped to the
+  /// chosen sede.
   static const String services = '/api/services';
+
+  /// `GET /api/services/{id}/doctors` — step 2's doctors for ONE service,
+  /// regardless of establishment. `ServicioController.getDoctorsByService`.
+  ///
+  /// Not scoped by sede: the backend has no "doctors at this service AND
+  /// this establishment" endpoint, and `clinicore-angular` does not ask for
+  /// one either — a doctor performing a service is offered for it at every
+  /// sede that service is enabled at.
+  static String serviceDoctors(int serviceId) => '$services/$serviceId/doctors';
+
+  // ==========================================================
+  // ESTABLISHMENTS — step 1 of "Agendar"
+  // ==========================================================
+
+  /// `@RequestMapping("/api/stablishments")` on `StablishmentController`.
+  static const String stablishments = '/api/stablishments';
+
+  /// `GET /api/stablishments/{id}/services` — step 2's services, scoped to
+  /// the sede chosen in step 1. `StablishmentController.getServicesByStablishment`.
+  static String stablishmentServices(int stablishmentId) =>
+      '$stablishments/$stablishmentId/services';
 
   // ==========================================================
   // LOGOUT
@@ -278,4 +381,39 @@ abstract final class ApiEndpoints {
   /// response set, and matches what the Angular client already does
   /// (`auth.service.ts:147`).
   static const String logout = '$_auth/logout';
+
+  // ==========================================================
+  // REALTIME — turn updates pushed over STOMP/SockJS
+  // ==========================================================
+
+  /// `WebSocketConfig.registerStompEndpoints` — the STOMP endpoint, WITH
+  /// SockJS (`.withSockJS()`). Combine with [AppConfig.apiBaseUrl] for the
+  /// full URL; unlike every other member of this class this is not a Dio
+  /// path, it is handed to `StompConfig.sockJS`.
+  ///
+  /// Gated by `GlobalConfig`'s `.requestMatchers("/ws-turns/**").authenticated()`
+  /// — enforced by the SAME `JwtValidator` servlet filter every REST call
+  /// goes through, which means the handshake needs the SAME `jwt` cookie
+  /// [AuthInterceptor] already attaches to every Dio request. See
+  /// `TurnUpdatesRemoteDataSource` for how the socket carries it.
+  static const String wsTurns = '/ws-turns';
+
+  /// `/user/topic/turns` — the signed-in patient's OWN turn changes, pushed
+  /// the instant `TurnService.broadcastTurnUpdate` runs (create, check-in,
+  /// start-attention, treated, cancel, staff-cancel, reassign).
+  ///
+  /// **Not** `/topic/stablishment/{id}/{date}`. That one is an anonymous
+  /// broadcast for a waiting-room DISPLAY, and its `TurnDTO` payload carries
+  /// every subscriber's name, cedula, email and phone — a patient's phone
+  /// has no business on it. This destination is patient-scoped through
+  /// Spring's user-destination mechanism (`convertAndSendToUser`), the same
+  /// one `TurnService` already uses to reach doctors on
+  /// `/user/topic/service/{serviceId}/{date}`: the client subscribes to the
+  /// bare `/user/...` form and Spring routes the message to whichever STOMP
+  /// session's authenticated principal matches — resolved from the very
+  /// `SecurityContext` the `/ws-turns` handshake populated.
+  ///
+  /// The payload is a `TurnDTO`, the same shape `GET /api/turns/me` returns
+  /// per row — see `TurnModel.fromJson`.
+  static const String turnUpdatesDestination = '/user/topic/turns';
 }
