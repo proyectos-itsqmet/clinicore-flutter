@@ -14,3 +14,19 @@ sealed class AppointmentsEvent extends Equatable {
 class AppointmentsRequested extends AppointmentsEvent {
   const AppointmentsRequested();
 }
+
+/// Cancels one of the patient's own appointments.
+///
+/// [turnId] is the `Appointment.id` shown on the card — never a schedule id.
+/// There is no confirmation step inside the bloc: the screen asks before
+/// dispatching this, the same way `ProfileScreen` confirms before
+/// [AuthSignOutRequested] — a destructive action is a UI concern, not a
+/// state-machine one.
+class AppointmentCancelRequested extends AppointmentsEvent {
+  const AppointmentCancelRequested(this.turnId);
+
+  final int turnId;
+
+  @override
+  List<Object?> get props => <Object?>[turnId];
+}

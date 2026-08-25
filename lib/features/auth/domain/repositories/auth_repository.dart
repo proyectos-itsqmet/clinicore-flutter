@@ -58,12 +58,16 @@ abstract interface class AuthRepository {
   /// one makes every caller handle a failure that is not one.
   Future<Either<Failure, AuthSession?>> restoreSession();
 
-  /// Forgets the session on this device.
+  /// Forgets the session on this device, and tells the server too — best
+  /// effort.
   ///
-  /// There is no server call. The QMS token is a stateless JWT and
-  /// `AuthController` has no logout route, so logging out IS deleting the
-  /// token locally. The consequence is worth being honest about: a token that
-  /// leaked stays valid until it expires, up to 24 hours.
+  /// Calls `POST /auth/logout` first, but never surfaces its outcome: a
+  /// stateless JWT is logged out just as well by deleting it from the
+  /// device, so a failed or timed-out call must NOT stop this from clearing
+  /// the device. This always returns `Right`. The consequence worth being
+  /// honest about is unchanged by any of this: a token that leaked stays
+  /// valid server-side until it expires, up to 24 hours, whether or not the
+  /// server call above succeeded.
   Future<Either<Failure, Unit>> signOut();
 
   /// Whether this device can unlock with a fingerprint or face.

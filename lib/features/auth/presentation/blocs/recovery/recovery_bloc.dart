@@ -24,7 +24,7 @@ part 'recovery_state.dart';
 ///
 /// * `recover-password/init` issues a **300-second** token. That is the window
 ///   to read the mail and type the code.
-/// * `recover-password/verify-otp` swaps it for a **600-second** one. That is
+/// * `recover-password/verify-otp` swaps it for a **300-second** one. That is
 ///   the window to choose a new password.
 ///
 /// Both expire as a 401, which [AuthRepositoryImpl] maps to

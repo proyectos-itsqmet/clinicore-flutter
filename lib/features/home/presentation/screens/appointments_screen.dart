@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constant/app_icons.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/error/failures.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/helpers/date_labels.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
@@ -181,7 +182,13 @@ class AppointmentsList extends StatelessWidget {
           spacing: AppSpacing.section,
           children: <Widget>[
             for (final Appointment item in state.items)
-              _AppointmentTile(appointment: item),
+              _AppointmentTile(
+                appointment: item,
+                isCancelling: state.cancellingId == item.id,
+                cancelError: state.cancelFailureId == item.id
+                    ? state.cancelFailure
+                    : null,
+              ),
           ],
         );
       },
@@ -196,9 +203,22 @@ class AppointmentsList extends StatelessWidget {
 /// patient — the difference between them is where the clinic filed the turn
 /// internally, which is not something a patient can act on.
 class _AppointmentTile extends StatelessWidget {
-  const _AppointmentTile({required this.appointment});
+  const _AppointmentTile({
+    required this.appointment,
+    required this.isCancelling,
+    this.cancelError,
+  });
 
   final Appointment appointment;
+
+  /// True while THIS appointment's cancel request is in flight. Only this
+  /// card's button reacts — the rest of the list stays tappable.
+  final bool isCancelling;
+
+  /// Set only when the last cancel attempt for THIS appointment failed. See
+  /// `AppointmentsState.cancelFailureId` for why it is keyed by id instead of
+  /// being a single flag the whole list would share.
+  final Failure? cancelError;
 
   AppointmentStatus get _cardStatus => switch (appointment.status) {
     TurnStatus.pending || TurnStatus.waiting => AppointmentStatus.pending,
@@ -230,8 +250,77 @@ class _AppointmentTile extends StatelessWidget {
           : '${appointment.time} / turno ${appointment.ticket}',
       location: appointment.locationName ?? 'Sede por confirmar',
       status: _cardStatus,
+      // Only an UPCOMING turn can be cancelled — the same set the server
+      // accepts on `PUT /{id}/cancelled` (anything but treated/cancelled).
+      // Offering it on a past card would just collect a 400 the patient did
+      // not cause.
+      actions: appointment.isUpcoming
+          ? <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.sm,
+                  children: <Widget>[
+                    // Reported here, next to the button that failed — not as
+                    // a snackbar that slides away before it is read. Same
+                    // convention `_BookingPanel` uses for a failed booking.
+                    if (cancelError != null)
+                      Text(
+                        cancelError!.message,
+                        style: AppTypography.cap.copyWith(
+                          color: AppColors.emergency,
+                        ),
+                      ),
+                    AppButton(
+                      label: 'Cancelar turno',
+                      variant: AppButtonVariant.ghost,
+                      isLoading: isCancelling,
+                      onPressed: isCancelling
+                          ? null
+                          : () => _confirmCancel(context, appointment.id),
+                    ),
+                  ],
+                ),
+              ),
+            ]
+          : null,
     );
   }
+}
+
+/// Confirms before cancelling — the same one-tap gate `ProfileScreen` puts in
+/// front of "cerrar sesion". A cancellation cannot be undone from the app, so
+/// it earns the same pause a sign-out does.
+Future<void> _confirmCancel(BuildContext context, int turnId) async {
+  final bool? confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Cancelar este turno?'),
+      content: const Text(
+        'Esta accion no se puede deshacer. Vas a perder el lugar reservado.',
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(
+            'Volver',
+            style: AppTypography.button.copyWith(color: AppColors.ink2),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(
+            'Cancelar turno',
+            style: AppTypography.button.copyWith(color: AppColors.emergency),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed != true || !context.mounted) return;
+
+  context.read<AppointmentsBloc>().add(AppointmentCancelRequested(turnId));
 }
 
 /// Reserves the real geometry of two cards while the first load runs.

@@ -21,7 +21,7 @@ import '../widgets/recovery_flow_listeners.dart';
 ///
 /// ## The 10-minute cliff
 ///
-/// `recover-password/verify-otp` issues a token that lives 600 seconds, and
+/// `recover-password/verify-otp` issues a token that lives 300 seconds, and
 /// this screen's submission is what spends it. A patient who stops to think of
 /// a good password can run it out — so a 401 here is not an error to show on
 /// this form, it is a reason to go back one step. [RecoveryBloc] does that

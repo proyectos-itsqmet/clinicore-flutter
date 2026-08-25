@@ -48,6 +48,14 @@ class AppointmentsRepositoryImpl implements AppointmentsRepository {
     });
   }
 
+  @override
+  Future<Either<Failure, Appointment>> cancelAppointment(int turnId) {
+    return guardFailure(() async {
+      final TurnModel model = await remote.cancelTurn(turnId);
+      return model.toEntity();
+    });
+  }
+
   /// Sorts by day, then by hour within the day.
   ///
   /// Appointments with no date sink to the bottom in BOTH directions. That is

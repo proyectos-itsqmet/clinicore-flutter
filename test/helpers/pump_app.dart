@@ -119,6 +119,7 @@ HomeFakes setUpHomeDependencies() {
   sl.registerLazySingleton(() => GetMyProfile(sl()));
   sl.registerLazySingleton(() => UpdateMyContact(sl()));
   sl.registerLazySingleton(() => GetMyAppointments(sl()));
+  sl.registerLazySingleton(() => CancelAppointment(sl()));
   sl.registerLazySingleton(() => GetBookingOptions(sl()));
   sl.registerLazySingleton(() => GetAvailability(sl()));
   sl.registerLazySingleton(() => BookSlot(sl()));
@@ -133,8 +134,11 @@ HomeFakes setUpHomeDependencies() {
   );
 
   sl.registerFactoryParam<AppointmentsBloc, AppointmentScope, void>(
-    (AppointmentScope scope, _) =>
-        AppointmentsBloc(getMyAppointments: sl(), scope: scope),
+    (AppointmentScope scope, _) => AppointmentsBloc(
+      getMyAppointments: sl(),
+      cancelAppointment: sl(),
+      scope: scope,
+    ),
   );
 
   sl.registerFactory<BookingBloc>(

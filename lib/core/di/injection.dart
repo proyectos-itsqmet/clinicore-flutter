@@ -175,6 +175,7 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => GetMyProfile(sl()));
   sl.registerLazySingleton(() => UpdateMyContact(sl()));
   sl.registerLazySingleton(() => GetMyAppointments(sl()));
+  sl.registerLazySingleton(() => CancelAppointment(sl()));
   sl.registerLazySingleton(() => GetBookingOptions(sl()));
   sl.registerLazySingleton(() => GetAvailability(sl()));
   sl.registerLazySingleton(() => BookSlot(sl()));
@@ -201,8 +202,11 @@ Future<void> configureDependencies() async {
   // clinic: on a shared phone, a singleton would carry one patient's
   // appointments into the next patient's session.
   sl.registerFactoryParam<AppointmentsBloc, AppointmentScope, void>(
-    (AppointmentScope scope, _) =>
-        AppointmentsBloc(getMyAppointments: sl(), scope: scope),
+    (AppointmentScope scope, _) => AppointmentsBloc(
+      getMyAppointments: sl(),
+      cancelAppointment: sl(),
+      scope: scope,
+    ),
   );
 
   // A factory, like the auth flow blocs: "Agendar" is a multi-step flow, and a

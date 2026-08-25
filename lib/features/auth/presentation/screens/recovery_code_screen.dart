@@ -20,7 +20,7 @@ import '../widgets/recovery_flow_listeners.dart';
 /// are now symmetric: both store a code server-side and both reject a wrong
 /// one. They stay SEPARATE endpoints because they authorise different things —
 /// this one hands out `ROLE_CHANGE_PASSWORD`, registration's hands out
-/// `ROLE_REGISTER_VERIFIED` — and one token that did both would be a hole.
+/// `ROLE_PENDING_REGISTRATION` — and one token that did both would be a hole.
 ///
 /// ## Three tries, and then the code is dead
 ///

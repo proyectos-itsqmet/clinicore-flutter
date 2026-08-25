@@ -24,12 +24,17 @@ part 'appointments_state.dart';
 /// Registered as a **factory** — one per screen, disposed with it. A singleton
 /// would carry one patient's list into the next session on a shared phone.
 class AppointmentsBloc extends Bloc<AppointmentsEvent, AppointmentsState> {
-  AppointmentsBloc({required this.getMyAppointments, required this.scope})
-    : super(const AppointmentsState.initial()) {
+  AppointmentsBloc({
+    required this.getMyAppointments,
+    required this.cancelAppointment,
+    required this.scope,
+  }) : super(const AppointmentsState.initial()) {
     on<AppointmentsRequested>(_onRequested);
+    on<AppointmentCancelRequested>(_onCancelRequested);
   }
 
   final GetMyAppointments getMyAppointments;
+  final CancelAppointment cancelAppointment;
   final AppointmentScope scope;
 
   Future<void> _onRequested(
@@ -56,6 +61,42 @@ class AppointmentsBloc extends Bloc<AppointmentsEvent, AppointmentsState> {
           clearFailure: true,
         ),
       ),
+    );
+  }
+
+  Future<void> _onCancelRequested(
+    AppointmentCancelRequested event,
+    Emitter<AppointmentsState> emit,
+  ) async {
+    emit(
+      state.copyWith(
+        cancellingId: event.turnId,
+        clearCancelFailure: true,
+      ),
+    );
+
+    final result = await cancelAppointment(event.turnId);
+
+    await result.fold(
+      (Failure failure) async {
+        emit(
+          state.copyWith(
+            clearCancellingId: true,
+            cancelFailure: failure,
+            cancelFailureId: event.turnId,
+          ),
+        );
+      },
+      (Appointment _) async {
+        // The cancelled turn may no longer belong in THIS scope (an upcoming
+        // one just became a past one), and patching it in place would have to
+        // reimplement that rule here. Asking again is the same call this
+        // bloc already makes on every reload, and it is the one place the
+        // rule already lives — same reasoning as `BookingBloc._onConfirmed`
+        // re-fetching availability after a booking lands.
+        emit(state.copyWith(clearCancellingId: true, clearCancelFailure: true));
+        await _onRequested(const AppointmentsRequested(), emit);
+      },
     );
   }
 }

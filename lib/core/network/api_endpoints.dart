@@ -80,7 +80,7 @@ abstract final class ApiEndpoints {
   // | step   | needs                  | returns a token that     | lifetime |
   // |--------|------------------------|--------------------------|----------|
   // | init   | nothing                | ROLE_OTP_PENDING         | 300s     |
-  // | verify | the init token         | ROLE_CHANGE_PASSWORD     | 600s     |
+  // | verify | the init token         | ROLE_CHANGE_PASSWORD     | 300s     |
   // | change | the verify token       | — (clears the cookie)    | —        |
   //
   // **This OTP is real**, which is the difference from registration's.
@@ -122,30 +122,37 @@ abstract final class ApiEndpoints {
   /// Authenticates with step 2's token. 200: `{ "Message": String }`.
   static const String recoverPasswordChange = '$_auth/recover-password/change';
 
-  /// `POST /auth/verify-otp` — verifies REGISTRATION's code.
+  /// `POST /auth/verify-registration-otp` — verifies REGISTRATION's code.
   ///
-  /// **This used to say "DOES NOT EXIST". It does now** (2026-08-24), and the
-  /// two bugs that made the old code decorative are fixed with it:
-  /// `AuthService.initRegistration` now calls `otpService.saveOtp`, so
-  /// `otpStore` has something to compare against, and the route that calls
-  /// `validate` exists.
+  /// **Not `/auth/verify-otp`, and the token it returns does not carry
+  /// `ROLE_REGISTER_VERIFIED`.** An earlier version of this file invented
+  /// both: that path 404s, and that authority does not exist anywhere in
+  /// `Backend_QMS` — grepping the whole backend for it returns zero hits.
+  /// The real route is the one above (`AuthController.java:119`) and the
+  /// real authority is `ROLE_PENDING_REGISTRATION`
+  /// (`AuthService.java:174`). This is precisely the failure mode this
+  /// file's own header warns about: a comment that lies convinces the next
+  /// reader they already checked.
   ///
   /// Body: `{ "otp": String }` — `VerifyOtpBody`, the same shape recovery
   /// uses. Authenticates with step 1's `ROLE_OTP_PENDING` flash token; the
   /// server takes the email from `auth.getName()`.
   ///
   /// Returns a NEW flash token via `Set-Cookie`, carrying
-  /// `ROLE_REGISTER_VERIFIED`, 300s.
+  /// `ROLE_PENDING_REGISTRATION`, 300 seconds — the same flash token as step 1.
   ///
-  /// **It is ADDITIVE**, which is what makes the token swap safe:
-  /// `register-patient` has no `hasAuthority` matcher in `GlobalConfig` and
-  /// `AuthService.completeRegistration` only compares `auth.getName()` with the
-  /// submitted email. Both flash tokens carry the same subject, so step 3
-  /// accepts either one — `ROLE_REGISTER_VERIFIED` exists so the server CAN
-  /// start requiring it once every client verifies.
+  /// **The specific authority does not matter for step 3**, which is what
+  /// makes the token swap safe: `register-patient` has no `hasAuthority`
+  /// matcher in `GlobalConfig`, and `AuthService.completeRegistration` only
+  /// compares `auth.getName()` with the submitted email. Both flash tokens
+  /// carry the same subject, so step 3 accepts either one.
+  ///
+  /// 200 body: `{ "Message": "Código OTP verificado correctamente", "email":
+  /// String }` — capital `M`, like `init-registration-patient`.
+  /// `AuthRemoteDataSourceImpl` never reads it; only the cookie matters here.
   ///
   /// Consumed by `RegistrationBloc._onCodeSubmitted`.
-  static const String verifyOtp = '$_auth/verify-otp';
+  static const String verifyRegistrationOtp = '$_auth/verify-registration-otp';
 
   // ==========================================================
   // PATIENT — the signed-in patient's own record
@@ -154,20 +161,20 @@ abstract final class ApiEndpoints {
   /// `@RequestMapping("/api/patients")` on `PatientController`.
   static const String _patients = '/api/patients';
 
-  /// `GET /api/patients/me` — the signed-in patient's profile.
+  /// `GET /api/patients/me` — **does not exist as a route yet.**
   ///
-  /// Added 2026-08-24; `PatientService.getPatientById` had existed for a while
-  /// as unreachable code.
+  /// `PatientController` has only `PUT /me` (below) and
+  /// `PUT /change-password`; there is no `@GetMapping("/me")`, even though
+  /// `PatientService.getPatientById` exists and could back one. Listed here
+  /// anyway, per this file's own rule: an honest gap is easier to fix than a
+  /// route that silently 404s because nobody wrote it down.
   ///
-  /// Takes no parameters: the server reads the UUID out of the token. That is
-  /// worth knowing because the subject of the login token IS a UUID, not an
-  /// email — `PatientService.loadUserByUsername` builds the `UserDetails` with
-  /// `.username(patient.getUuid().toString())`. The registration FLASH token
-  /// carries the email instead, so this endpoint only answers to the 24h
-  /// login token.
-  ///
-  /// 200 body: `PatientDTO`. `password` is always null — the server's mapper
-  /// never sets it.
+  /// Once it lands it should take no parameters — the same way `PUT /me`
+  /// already resolves the caller from `auth.getName()`, parsed with
+  /// `UUID.fromString`. That is worth knowing ahead of time: the login
+  /// token's subject is the patient's UUID, not their email, so a `GET /me`
+  /// built the same way would only ever answer to the 24h login token, never
+  /// to a registration flash token.
   static const String patientMe = '$_patients/me';
 
   /// `PUT /api/patients/me` — updates the signed-in patient's CONTACT data.
@@ -210,6 +217,22 @@ abstract final class ApiEndpoints {
   /// from the token and assigns the next `order` for that schedule's day.
   static const String turns = _turns;
 
+  /// `PUT /api/turns/{id}/cancelled` — cancels one of the CALLER's own turns.
+  ///
+  /// No request body. Ownership is checked server-side, against the token —
+  /// never against anything the client sends: `TurnService.cancelTurn`
+  /// compares the turn's patient UUID with `auth.getName()` and answers 403
+  /// `{ "error": "Error de permisos: Este turno no te pertenece" }` when they
+  /// do not match (`TurnController.java:96-100`). A turn already
+  /// `TURN_TREATED` or `TURN_CANCELLED` answers 400 instead.
+  ///
+  /// 200 body: the updated `TurnDTO`, same shape `POST /api/turns` returns.
+  ///
+  /// The only parameterised member of this class: every other endpoint here
+  /// is a fixed path, but this one needs the turn id inline rather than as a
+  /// query parameter.
+  static String turnCancelled(int turnId) => '$_turns/$turnId/cancelled';
+
   // ==========================================================
   // AVAILABILITY — what "Agendar" is built from
   // ==========================================================
@@ -237,14 +260,22 @@ abstract final class ApiEndpoints {
   static const String services = '/api/services';
 
   // ==========================================================
-  // NOT ON THE SERVER YET
+  // LOGOUT
   // ==========================================================
 
-  /// **DOES NOT EXIST as a route**, though `JwtValidator` special-cases
-  /// `/auth/logout` in its exception handler so an expired token can still
-  /// clear the cookie. `AuthController` has no `@PostMapping("/logout")`.
+  /// `POST /auth/logout` — exists. An earlier version of this file said it
+  /// did not; `AuthController.java:239` has had `@PostMapping("/logout")`
+  /// since before this app started calling it.
   ///
-  /// It costs the mobile app nothing: a stateless JWT is logged out by
-  /// deleting it from the device, which is what `AuthLocalDataSource` does.
+  /// Body: none. Clears the security context server-side and drops the
+  /// `jwt` cookie. 200 body: `{ "message": "Sesión cerrada correctamente" }`
+  /// — lowercase `message`, unlike registration's replies.
+  ///
+  /// **Calling it is still optional, and `AuthRepositoryImpl.signOut` treats
+  /// it that way.** A stateless JWT is logged out just as well by deleting
+  /// it from the device, which `AuthLocalDataSource.clear()` always does —
+  /// even if this request fails. Calling it anyway revokes the cookie this
+  /// response set, and matches what the Angular client already does
+  /// (`auth.service.ts:147`).
   static const String logout = '$_auth/logout';
 }

@@ -19,7 +19,7 @@ import '../widgets/registration_flow_listeners.dart';
 /// ## The code is verified now
 ///
 /// It was not, and the note that used to live here said so at length. Three
-/// things were missing and all three are done: the route `/auth/verify-otp`
+/// things were missing and all three are done: the route `/auth/verify-registration-otp`
 /// exists, `AuthService.initRegistration` calls `otpService.saveOtp` (so the
 /// store `validate` compares against is no longer permanently empty), and
 /// `RegistrationBloc._onCodeSubmitted` calls the endpoint instead of advancing

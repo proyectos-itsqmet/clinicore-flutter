@@ -22,6 +22,13 @@ abstract interface class AppointmentsRemoteDataSource {
     int page = 0,
     int size = 20,
   });
+
+  /// Cancels one of the CALLER's own turns.
+  ///
+  /// Ownership is checked server-side against the token, never against
+  /// anything sent here — see `ApiEndpoints.turnCancelled`. Returns the
+  /// updated turn, `TURN_CANCELLED`, the same shape booking returns.
+  Future<TurnModel> cancelTurn(int turnId);
 }
 
 class AppointmentsRemoteDataSourceImpl implements AppointmentsRemoteDataSource {
@@ -80,6 +87,18 @@ class AppointmentsRemoteDataSourceImpl implements AppointmentsRemoteDataSource {
         (int sum, PageModel<TurnModel> p) => sum + p.totalElements,
       ),
     );
+  }
+
+  @override
+  Future<TurnModel> cancelTurn(int turnId) async {
+    try {
+      final Response<dynamic> response = await _dio.put<dynamic>(
+        ApiEndpoints.turnCancelled(turnId),
+      );
+      return TurnModel.fromJson(_asMap(response.data));
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
   }
 
   Future<PageModel<TurnModel>> _fetchPage({

@@ -60,6 +60,19 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
 
   final List<AppointmentScope> requestedScopes = <AppointmentScope>[];
 
+  /// What cancelling answers. Defaults to success so a test only scripts this
+  /// when it is actually about a cancel failure.
+  Either<Failure, Appointment> cancelResult =
+      const Right<Failure, Appointment>(
+        Appointment(id: 1, ticket: 7, status: TurnStatus.cancelled),
+      );
+
+  /// The turn id the screen actually sent. The assertion that matters most:
+  /// tapping "Cancelar turno" on one card must cancel THAT card, not another.
+  int? lastCancelledId;
+
+  int cancelCallCount = 0;
+
   @override
   Future<Either<Failure, AppointmentPage>> getMyAppointments({
     required AppointmentScope scope,
@@ -69,6 +82,13 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
     requestedScopes.add(scope);
     return results[scope] ??
         const Right<Failure, AppointmentPage>(AppointmentPage.empty());
+  }
+
+  @override
+  Future<Either<Failure, Appointment>> cancelAppointment(int turnId) async {
+    lastCancelledId = turnId;
+    cancelCallCount++;
+    return cancelResult;
   }
 }
 

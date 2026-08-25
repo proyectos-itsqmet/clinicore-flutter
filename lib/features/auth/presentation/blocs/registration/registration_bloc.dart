@@ -35,7 +35,7 @@ part 'registration_state.dart';
 ///
 /// ## About the OTP step
 ///
-/// The code IS verified by the server now — `POST /auth/verify-otp`. It used
+/// The code IS verified by the server now — `POST /auth/verify-registration-otp`. It used
 /// not to be: `initRegistration` mailed a code but never stored it, so there
 /// was nothing to check it against and this handler advanced the step locally.
 /// Both halves exist today, so the code the patient types is no longer

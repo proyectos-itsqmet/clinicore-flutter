@@ -21,11 +21,11 @@ class RestoreSession implements UseCase<AuthSession?, NoParams> {
   }
 }
 
-/// Forgets the session on this device.
+/// Forgets the session on this device and asks the server to drop it too.
 ///
-/// There is no server round trip — the QMS token is a stateless JWT and
-/// `AuthController` exposes no logout route, so signing out IS deleting the
-/// token locally.
+/// The server round trip (`POST /auth/logout`) is best-effort — see
+/// `AuthRepositoryImpl.signOut`. A patient tapping "cerrar sesion" ends up
+/// logged out on THIS device no matter what the network does.
 class SignOut implements UseCase<Unit, NoParams> {
   const SignOut(this._repository);
 

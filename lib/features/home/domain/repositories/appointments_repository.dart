@@ -41,4 +41,11 @@ abstract interface class AppointmentsRepository {
     int page = 0,
     int size = 20,
   });
+
+  /// Cancels one of the signed-in patient's own appointments.
+  ///
+  /// Takes the TURN id, never a schedule id. The server re-checks ownership
+  /// itself — this is not the client's guarantee to make — and refuses a
+  /// turn already attended or cancelled.
+  Future<Either<Failure, Appointment>> cancelAppointment(int turnId);
 }

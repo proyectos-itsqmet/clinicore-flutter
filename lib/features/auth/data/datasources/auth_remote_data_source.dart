@@ -28,7 +28,7 @@ class RemoteAuthResult {
 /// | `init-registration-patient`      | `Set-Cookie: jwt=...` (300s) |
 /// | `register-patient`               | `Set-Cookie: jwt=...` (24h) |
 /// | `recover-password/init`          | `Set-Cookie: jwt=...` (300s) |
-/// | `recover-password/verify-otp`    | `Set-Cookie: jwt=...` (600s) |
+/// | `recover-password/verify-otp`    | `Set-Cookie: jwt=...` (300s) |
 ///
 /// **Only login got a `/mobile/` variant.** Everything else was written for the
 /// Angular app, where the browser stores the cookie invisibly — so a native
@@ -53,14 +53,16 @@ abstract interface class AuthRemoteDataSource {
 
   /// Registration step 2: checks the mailed code.
   ///
-  /// Returns a fresh 300-second token carrying `ROLE_REGISTER_VERIFIED`, which
-  /// replaces step 1's `ROLE_OTP_PENDING` one.
+  /// Returns a fresh 300-second token carrying `ROLE_PENDING_REGISTRATION`,
+  /// which replaces step 1's `ROLE_OTP_PENDING` one — not `ROLE_REGISTER_
+  /// VERIFIED`, which does not exist anywhere in `Backend_QMS`. See
+  /// `ApiEndpoints.verifyRegistrationOtp` for the full story on that.
   ///
   /// Swapping the token is safe for step 3: `/auth/register-patient` has no
   /// `hasAuthority` matcher in `GlobalConfig` and `completeRegistration` only
   /// compares `auth.getName()` with the submitted email. Both tokens carry the
-  /// same subject, so the new one still authenticates step 3 — the new
-  /// authority exists so the server CAN start requiring it later.
+  /// same subject, so the new one still authenticates step 3 regardless of
+  /// which specific authority it holds.
   Future<String> verifyRegistrationOtp({required String otp});
 
   Future<RemoteAuthResult> completeRegistration(
@@ -71,7 +73,7 @@ abstract interface class AuthRemoteDataSource {
   /// [verifyRecoveryOtp] authenticates with.
   Future<String> initPasswordRecovery({required String email});
 
-  /// Recovery step 2. Returns the 600-second `ROLE_CHANGE_PASSWORD` token that
+  /// Recovery step 2. Returns the 300-second `ROLE_CHANGE_PASSWORD` token that
   /// [changePassword] authenticates with.
   Future<String> verifyRecoveryOtp({required String otp});
 
@@ -81,6 +83,11 @@ abstract interface class AuthRemoteDataSource {
     required String password,
     required String repeatedPassword,
   });
+
+  /// `POST /auth/logout`. Best-effort: see `AuthRepositoryImpl.signOut`,
+  /// which is the only caller and the one that decides what happens if this
+  /// throws.
+  Future<void> logout();
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -203,7 +210,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<String> verifyRegistrationOtp({required String otp}) async {
     try {
       final Response<dynamic> response = await _dio.post<dynamic>(
-        ApiEndpoints.verifyOtp,
+        ApiEndpoints.verifyRegistrationOtp,
         data: VerifyOtpRequestModel(otp: otp).toJson(),
       );
 
@@ -211,7 +218,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       if (token == null) {
         throw const ServerException(
           message: 'No pudimos verificar el codigo. Intenta de nuevo.',
-          data: 'missing jwt cookie on auth/verify-otp',
+          data: 'missing jwt cookie on auth/verify-registration-otp',
         );
       }
       return token;
@@ -254,6 +261,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
           repeatedPassword: repeatedPassword,
         ).toJson(),
       );
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
+  }
+
+  @override
+  Future<void> logout() async {
+    try {
+      await _dio.post<dynamic>(ApiEndpoints.logout);
     } on DioException catch (error) {
       throw mapDioException(error);
     }

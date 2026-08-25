@@ -134,9 +134,20 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Either<Failure, Unit>> signOut() async {
+    // Best-effort and FIRST: whatever `/auth/logout` does, the patient must
+    // end up logged out on this device. A network error, a timeout, or the
+    // server being down are not reasons to leave "cerrar sesion" looking
+    // like it did nothing — so its result is deliberately never reported,
+    // and `local.clear()` below always runs regardless of what happens here.
+    try {
+      await remote.logout();
+    } on AppException {
+      // Swallowed on purpose. See above.
+    }
+
     await local.clear();
-    // Always a success. There is no server call to fail, and a sign-out that
-    // can refuse is a trap.
+    // Always a success. There is no failure a caller could act on: the local
+    // half is unconditional, and a sign-out that can refuse is a trap.
     return const Right<Failure, Unit>(unit);
   }
 

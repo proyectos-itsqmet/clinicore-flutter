@@ -109,12 +109,14 @@ class CacheFailure extends Failure {
 /// recovery, which now ships as three real endpoints
 /// (`/auth/recover-password/*`), so the one place that returned it is gone.
 ///
-/// It stays because the pattern is still needed: `/auth/verify-otp` does not
-/// exist, so REGISTRATION's code is still unverified. The day that step is
-/// wired properly, this is what it returns while the route is missing —
-/// better than a raw 404 or, worse, pretending the code was checked.
+/// Registration's OTP gap closed too. The route is
+/// `/auth/verify-registration-otp` (`AuthController.java:119`), the code is
+/// stored by `otpService.saveOtp` and checked by `validate`, so nothing
+/// pretends a code was verified any more.
 ///
-/// Delete it if that gap closes too and nothing else claims it.
+/// It stays for the NEXT missing route. When a feature reaches for an endpoint
+/// the backend has not written, this is what it should return — better than a
+/// raw 404, and far better than silently succeeding.
 class NotImplementedOnServerFailure extends Failure {
   const NotImplementedOnServerFailure({
     super.message =

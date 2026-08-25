@@ -59,7 +59,7 @@ class RecoverPasswordInitRequestModel {
 /// it from `auth.getName()` on the step-1 token. Sending it in the body would
 /// invite the two to disagree.
 ///
-/// One model for BOTH otp endpoints — `/auth/verify-otp` (registration) and
+/// One model for BOTH otp endpoints — `/auth/verify-registration-otp` (registration) and
 /// `/auth/recover-password/verify-otp` — because both bind the same
 /// `com.devluis.types.VerifyOtpBody`. The endpoints stay separate on purpose,
 /// since they authorise different things; the request body does not.

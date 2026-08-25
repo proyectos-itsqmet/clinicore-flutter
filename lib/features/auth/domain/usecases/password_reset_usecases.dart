@@ -16,8 +16,8 @@ import '../repositories/auth_repository.dart';
 /// | step                    | window | on success the server issues |
 /// |-------------------------|--------|------------------------------|
 /// | [InitPasswordRecovery]  | —      | `ROLE_OTP_PENDING`, 300s     |
-/// | [VerifyRecoveryOtp]     | 300s   | `ROLE_CHANGE_PASSWORD`, 600s |
-/// | [ChangePassword]        | 600s   | nothing; the cookie is cleared |
+/// | [VerifyRecoveryOtp]     | 300s   | `ROLE_CHANGE_PASSWORD`, 300s |
+/// | [ChangePassword]        | 300s   | nothing; the cookie is cleared |
 
 /// Step 1 — asks the server to mail a 6-digit code.
 ///

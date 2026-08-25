@@ -48,3 +48,19 @@ class GetMyAppointments
     );
   }
 }
+
+/// Cancels one appointment.
+///
+/// Takes the TURN id and nothing else — there is no parameter through which
+/// a caller could cancel somebody else's turn, because the server checks
+/// ownership from the token regardless of what is sent here.
+class CancelAppointment implements UseCase<Appointment, int> {
+  const CancelAppointment(this._repository);
+
+  final AppointmentsRepository _repository;
+
+  @override
+  Future<Either<Failure, Appointment>> call(int turnId) {
+    return _repository.cancelAppointment(turnId);
+  }
+}

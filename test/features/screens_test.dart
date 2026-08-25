@@ -304,6 +304,130 @@ void main() {
       expect(find.text('No tienes citas agendadas'), findsNothing);
       expect(find.text('Reintentar'), findsOneWidget);
     });
+
+    /// `AppointmentCard.actions` is documented as hosting "Reprogramar,
+    /// Cancelar" — this is the "Cancelar" half landing.
+    group('cancelling an appointment', () {
+      void seedUpcoming() {
+        fakes.appointments.results[AppointmentScope.upcoming] =
+            Right<Failure, AppointmentPage>(
+              AppointmentPage(
+                items: testUpcoming,
+                page: 0,
+                isLast: true,
+                totalElements: testUpcoming.length,
+              ),
+            );
+      }
+
+      /// Opens the confirmation dialog from the FIRST card and, unless
+      /// [confirm] is false, taps the dialog's own "Cancelar turno" — never
+      /// the card's, which shares the same label and would tap the wrong
+      /// widget type if the finder were not scoped by widget.
+      Future<void> tapCancelOnFirstCard(
+        WidgetTester tester, {
+        bool confirm = true,
+      }) async {
+        await tester.tap(
+          find.widgetWithText(AppButton, 'Cancelar turno').first,
+        );
+        // The dialog's own enter transition — not one of this app's bespoke
+        // animations, so there is no AppMotion constant for it.
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('Cancelar este turno?'), findsOneWidget);
+
+        await tester.tap(
+          find.widgetWithText(
+            TextButton,
+            confirm ? 'Cancelar turno' : 'Volver',
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
+      }
+
+      testWidgets('an upcoming appointment offers a way to cancel it', (
+        tester,
+      ) async {
+        seedUpcoming();
+
+        await pumpApp(tester, const AppointmentsScreen());
+        await tester.pump();
+
+        // Both fixture rows are upcoming (pending / waiting) so both offer it.
+        expect(
+          find.widgetWithText(AppButton, 'Cancelar turno'),
+          findsNWidgets(testUpcoming.length),
+        );
+      });
+
+      testWidgets('declining the confirmation cancels nothing', (
+        tester,
+      ) async {
+        seedUpcoming();
+
+        await pumpApp(tester, const AppointmentsScreen());
+        await tester.pump();
+
+        await tapCancelOnFirstCard(tester, confirm: false);
+
+        expect(fakes.appointments.cancelCallCount, 0);
+        expect(
+          find.widgetWithText(AppButton, 'Cancelar turno'),
+          findsNWidgets(testUpcoming.length),
+        );
+      });
+
+      testWidgets("confirming sends the card's own id and reloads the list", (
+        tester,
+      ) async {
+        seedUpcoming();
+
+        await pumpApp(tester, const AppointmentsScreen());
+        await tester.pump();
+
+        // testUpcoming[0].id is 1 — the appointment's own id, not its
+        // position in the list, and not its ticket number (7).
+        await tapCancelOnFirstCard(tester);
+
+        expect(fakes.appointments.lastCancelledId, 1);
+        // Reloaded on top of the fetch the screen already did on first
+        // build — the server, not a local patch, decides the new list.
+        expect(
+          fakes.appointments.requestedScopes
+              .where((scope) => scope == AppointmentScope.upcoming)
+              .length,
+          greaterThanOrEqualTo(2),
+        );
+      });
+
+      testWidgets(
+        'a cancel failure is reported next to the card, not as an empty list',
+        (tester) async {
+          seedUpcoming();
+          fakes.appointments.cancelResult = const Left<Failure, Appointment>(
+            ValidationFailure(
+              message: 'No puedes cancelar un turno que ya fue atendido.',
+            ),
+          );
+
+          await pumpApp(tester, const AppointmentsScreen());
+          await tester.pump();
+
+          await tapCancelOnFirstCard(tester);
+
+          expect(
+            find.text('No puedes cancelar un turno que ya fue atendido.'),
+            findsOneWidget,
+          );
+          // NOT the load-failure branch: the cards stay, "Reintentar" does
+          // not appear. A failed cancel is not a failed load.
+          expect(find.text('Pediatria'), findsOneWidget);
+          expect(find.text('Reintentar'), findsNothing);
+        },
+      );
+    });
   });
 
   group('LoginScreen', () {
