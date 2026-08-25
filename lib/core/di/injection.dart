@@ -18,18 +18,29 @@ import '../../features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import '../../features/auth/presentation/blocs/registration/registration_bloc.dart';
 import '../../features/home/data/datasources/appointments_remote_data_source.dart';
 import '../../features/home/data/datasources/booking_remote_data_source.dart';
+import '../../features/home/data/datasources/clinical_remote_data_source.dart';
+import '../../features/home/data/datasources/coverage_remote_data_source.dart';
 import '../../features/home/data/datasources/patient_remote_data_source.dart';
+import '../../features/home/data/datasources/turn_updates_remote_data_source.dart';
 import '../../features/home/data/repositories/appointments_repository_impl.dart';
 import '../../features/home/data/repositories/booking_repository_impl.dart';
+import '../../features/home/data/repositories/clinical_repository_impl.dart';
+import '../../features/home/data/repositories/coverage_repository_impl.dart';
 import '../../features/home/data/repositories/patient_repository_impl.dart';
 import '../../features/home/domain/repositories/appointments_repository.dart';
 import '../../features/home/domain/repositories/booking_repository.dart';
+import '../../features/home/domain/repositories/clinical_repository.dart';
+import '../../features/home/domain/repositories/coverage_repository.dart';
 import '../../features/home/domain/repositories/patient_repository.dart';
 import '../../features/home/domain/usecases/appointments_usecases.dart';
 import '../../features/home/domain/usecases/booking_usecases.dart';
+import '../../features/home/domain/usecases/clinical_usecases.dart';
+import '../../features/home/domain/usecases/coverage_usecases.dart';
 import '../../features/home/domain/usecases/profile_usecases.dart';
 import '../../features/home/presentation/blocs/appointments/appointments_bloc.dart';
 import '../../features/home/presentation/blocs/booking/booking_bloc.dart';
+import '../../features/home/presentation/blocs/coverage/coverage_bloc.dart';
+import '../../features/home/presentation/blocs/history/history_bloc.dart';
 import '../../features/home/presentation/blocs/profile/profile_bloc.dart';
 import '../network/dio_client.dart';
 import '../network/token_store.dart';
@@ -157,10 +168,16 @@ Future<void> configureDependencies() async {
     () => AppointmentsRemoteDataSourceImpl(sl()),
   );
 
+  // Depends on TokenStore, same as Dio's own AuthInterceptor — see the
+  // class doc for why the socket authenticates itself the same way.
+  sl.registerLazySingleton<TurnUpdatesRemoteDataSource>(
+    () => TurnUpdatesRemoteDataSourceImpl(sl()),
+  );
+
   sl.registerLazySingleton<PatientRepository>(() => PatientRepositoryImpl(sl()));
 
   sl.registerLazySingleton<AppointmentsRepository>(
-    () => AppointmentsRepositoryImpl(sl()),
+    () => AppointmentsRepositoryImpl(sl(), sl()),
   );
 
   sl.registerLazySingleton<BookingRemoteDataSource>(
@@ -169,6 +186,25 @@ Future<void> configureDependencies() async {
 
   sl.registerLazySingleton<BookingRepository>(() => BookingRepositoryImpl(sl()));
 
+  // "Historial"'s two extra reads — see `HistoryBloc` for why they are
+  // fetched and joined there rather than folded into `AppointmentsRepository`.
+  sl.registerLazySingleton<ClinicalRemoteDataSource>(
+    () => ClinicalRemoteDataSourceImpl(sl()),
+  );
+
+  sl.registerLazySingleton<ClinicalRepository>(
+    () => ClinicalRepositoryImpl(sl()),
+  );
+
+  // "Mi informacion"'s Cobertura group.
+  sl.registerLazySingleton<CoverageRemoteDataSource>(
+    () => CoverageRemoteDataSourceImpl(sl()),
+  );
+
+  sl.registerLazySingleton<CoverageRepository>(
+    () => CoverageRepositoryImpl(sl()),
+  );
+
   // ==========================================================
   // HOME — domain
   // ==========================================================
@@ -176,9 +212,14 @@ Future<void> configureDependencies() async {
   sl.registerLazySingleton(() => UpdateMyContact(sl()));
   sl.registerLazySingleton(() => GetMyAppointments(sl()));
   sl.registerLazySingleton(() => CancelAppointment(sl()));
-  sl.registerLazySingleton(() => GetBookingOptions(sl()));
-  sl.registerLazySingleton(() => GetAvailability(sl()));
+  sl.registerLazySingleton(() => WatchTurnUpdates(sl()));
+  sl.registerLazySingleton(() => GetEstablishments(sl()));
+  sl.registerLazySingleton(() => GetServicesWithDoctors(sl()));
+  sl.registerLazySingleton(() => GetFreeSchedules(sl()));
   sl.registerLazySingleton(() => BookSlot(sl()));
+  sl.registerLazySingleton(() => GetMyEncounters(sl()));
+  sl.registerLazySingleton(() => GetMyPrescriptions(sl()));
+  sl.registerLazySingleton(() => GetMyCoverages(sl()));
 
   // ==========================================================
   // HOME — presentation
@@ -205,18 +246,36 @@ Future<void> configureDependencies() async {
     (AppointmentScope scope, _) => AppointmentsBloc(
       getMyAppointments: sl(),
       cancelAppointment: sl(),
+      watchTurnUpdates: sl(),
       scope: scope,
     ),
   );
 
-  // A factory, like the auth flow blocs: "Agendar" is a multi-step flow, and a
-  // singleton would resume with a slot the patient chose an hour ago — which by
-  // then may belong to somebody else.
+  // A factory, like the auth flow blocs: "Agendar" is a multi-step wizard,
+  // and a singleton would resume with a slot the patient chose an hour ago —
+  // which by then may belong to somebody else.
   sl.registerFactory<BookingBloc>(
     () => BookingBloc(
-      getBookingOptions: sl(),
-      getAvailability: sl(),
+      getEstablishments: sl(),
+      getServicesWithDoctors: sl(),
+      getFreeSchedules: sl(),
       bookSlot: sl(),
     ),
+  );
+
+  // A factory: "Historial" is its own screen, fetched once per visit — see
+  // the bloc's class doc for why it is not folded into `AppointmentsBloc`.
+  sl.registerFactory<HistoryBloc>(
+    () => HistoryBloc(
+      getMyAppointments: sl(),
+      getMyEncounters: sl(),
+      getMyPrescriptions: sl(),
+    ),
+  );
+
+  // A factory: only "Mi informacion" reads it, so there is no cross-screen
+  // fetch for a singleton to share — unlike `ProfileBloc`.
+  sl.registerFactory<CoverageBloc>(
+    () => CoverageBloc(getMyCoverages: sl()),
   );
 }

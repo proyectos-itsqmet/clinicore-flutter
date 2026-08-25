@@ -30,3 +30,22 @@ class AppointmentCancelRequested extends AppointmentsEvent {
   @override
   List<Object?> get props => <Object?>[turnId];
 }
+
+/// A turn update arrived from the server in real time — see
+/// `WatchTurnUpdates`.
+///
+/// [AppointmentsBloc] reacts by reloading this bloc's OWN scope rather than
+/// patching [appointment] into `state.items` directly, for the same reason
+/// `_onCancelRequested` reloads after a cancel: the updated turn may no
+/// longer belong in THIS scope (a "waiting" turn just became "treated"),
+/// and the rule for which statuses belong to which scope already lives in
+/// one place — [AppointmentScope.statuses] — asking again reads it instead
+/// of re-implementing it here.
+class AppointmentRealtimeUpdateReceived extends AppointmentsEvent {
+  const AppointmentRealtimeUpdateReceived(this.appointment);
+
+  final Appointment appointment;
+
+  @override
+  List<Object?> get props => <Object?>[appointment];
+}

@@ -11,12 +11,18 @@ import 'package:clinicore_flutter/features/auth/presentation/blocs/recovery/reco
 import 'package:clinicore_flutter/features/auth/presentation/blocs/registration/registration_bloc.dart';
 import 'package:clinicore_flutter/features/home/domain/repositories/appointments_repository.dart';
 import 'package:clinicore_flutter/features/home/domain/repositories/booking_repository.dart';
+import 'package:clinicore_flutter/features/home/domain/repositories/clinical_repository.dart';
+import 'package:clinicore_flutter/features/home/domain/repositories/coverage_repository.dart';
 import 'package:clinicore_flutter/features/home/domain/repositories/patient_repository.dart';
 import 'package:clinicore_flutter/features/home/domain/usecases/appointments_usecases.dart';
 import 'package:clinicore_flutter/features/home/domain/usecases/booking_usecases.dart';
+import 'package:clinicore_flutter/features/home/domain/usecases/clinical_usecases.dart';
+import 'package:clinicore_flutter/features/home/domain/usecases/coverage_usecases.dart';
 import 'package:clinicore_flutter/features/home/domain/usecases/profile_usecases.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/appointments/appointments_bloc.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/booking/booking_bloc.dart';
+import 'package:clinicore_flutter/features/home/presentation/blocs/coverage/coverage_bloc.dart';
+import 'package:clinicore_flutter/features/home/presentation/blocs/history/history_bloc.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/profile/profile_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -81,17 +87,21 @@ FakeAuthRepository setUpAuthDependencies() {
   return repository;
 }
 
-/// The home feature's three doubles, registered together.
+/// The home feature's doubles, registered together.
 class HomeFakes {
   const HomeFakes({
     required this.patient,
     required this.appointments,
     required this.booking,
+    required this.clinical,
+    required this.coverage,
   });
 
   final FakePatientRepository patient;
   final FakeAppointmentsRepository appointments;
   final FakeBookingRepository booking;
+  final FakeClinicalRepository clinical;
+  final FakeCoverageRepository coverage;
 }
 
 /// Registers the home feature on top of auth, with fake repositories.
@@ -111,18 +121,27 @@ HomeFakes setUpHomeDependencies() {
   final FakePatientRepository patient = FakePatientRepository();
   final FakeAppointmentsRepository appointments = FakeAppointmentsRepository();
   final FakeBookingRepository booking = FakeBookingRepository();
+  final FakeClinicalRepository clinical = FakeClinicalRepository();
+  final FakeCoverageRepository coverage = FakeCoverageRepository();
 
   sl.registerSingleton<PatientRepository>(patient);
   sl.registerSingleton<AppointmentsRepository>(appointments);
   sl.registerSingleton<BookingRepository>(booking);
+  sl.registerSingleton<ClinicalRepository>(clinical);
+  sl.registerSingleton<CoverageRepository>(coverage);
 
   sl.registerLazySingleton(() => GetMyProfile(sl()));
   sl.registerLazySingleton(() => UpdateMyContact(sl()));
   sl.registerLazySingleton(() => GetMyAppointments(sl()));
   sl.registerLazySingleton(() => CancelAppointment(sl()));
-  sl.registerLazySingleton(() => GetBookingOptions(sl()));
-  sl.registerLazySingleton(() => GetAvailability(sl()));
+  sl.registerLazySingleton(() => WatchTurnUpdates(sl()));
+  sl.registerLazySingleton(() => GetEstablishments(sl()));
+  sl.registerLazySingleton(() => GetServicesWithDoctors(sl()));
+  sl.registerLazySingleton(() => GetFreeSchedules(sl()));
   sl.registerLazySingleton(() => BookSlot(sl()));
+  sl.registerLazySingleton(() => GetMyEncounters(sl()));
+  sl.registerLazySingleton(() => GetMyPrescriptions(sl()));
+  sl.registerLazySingleton(() => GetMyCoverages(sl()));
 
   // A FACTORY here, unlike production, and that is the point: the real app
   // registers ProfileBloc as a lazy singleton so two screens share one fetch.
@@ -137,22 +156,38 @@ HomeFakes setUpHomeDependencies() {
     (AppointmentScope scope, _) => AppointmentsBloc(
       getMyAppointments: sl(),
       cancelAppointment: sl(),
+      watchTurnUpdates: sl(),
       scope: scope,
     ),
   );
 
   sl.registerFactory<BookingBloc>(
     () => BookingBloc(
-      getBookingOptions: sl(),
-      getAvailability: sl(),
+      getEstablishments: sl(),
+      getServicesWithDoctors: sl(),
+      getFreeSchedules: sl(),
       bookSlot: sl(),
     ),
+  );
+
+  sl.registerFactory<HistoryBloc>(
+    () => HistoryBloc(
+      getMyAppointments: sl(),
+      getMyEncounters: sl(),
+      getMyPrescriptions: sl(),
+    ),
+  );
+
+  sl.registerFactory<CoverageBloc>(
+    () => CoverageBloc(getMyCoverages: sl()),
   );
 
   return HomeFakes(
     patient: patient,
     appointments: appointments,
     booking: booking,
+    clinical: clinical,
+    coverage: coverage,
   );
 }
 

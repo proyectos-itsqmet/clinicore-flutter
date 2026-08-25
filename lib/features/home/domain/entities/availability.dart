@@ -86,61 +86,6 @@ class BookingSlot extends Equatable {
 
   final bool isFree;
 
-  /// Same calendar day, ignoring any time component.
-  bool isOn(DateTime day) =>
-      date.year == day.year && date.month == day.month && date.day == day.day;
-
   @override
   List<Object?> get props => <Object?>[scheduleId, date, time, isFree];
-}
-
-/// Every slot the server returned for the current filters, plus the two views
-/// the three-step flow reads off it.
-///
-/// ONE fetch feeds both steps. Asking the server once for a date range and
-/// deriving the days from it is what makes step 2 instant after step 1 — the
-/// alternative is a request per day, which is a request per tap.
-class BookingAvailability extends Equatable {
-  const BookingAvailability({required this.slots});
-
-  const BookingAvailability.empty() : slots = const <BookingSlot>[];
-
-  final List<BookingSlot> slots;
-
-  /// The distinct days that have at least one FREE slot, in order.
-  ///
-  /// Filtered on free rather than showing every day the clinic has an agenda:
-  /// a day chip that opens onto a grid of struck-through hours is a tap that
-  /// could not lead anywhere.
-  List<DateTime> get bookableDays {
-    final List<DateTime> days = <DateTime>[];
-    for (final BookingSlot slot in slots) {
-      if (!slot.isFree) continue;
-      final DateTime day = DateTime(
-        slot.date.year,
-        slot.date.month,
-        slot.date.day,
-      );
-      if (!days.any((DateTime d) => d == day)) days.add(day);
-    }
-    days.sort();
-    return days;
-  }
-
-  /// Every slot on [day], free or not, in time order.
-  ///
-  /// Taken slots are INCLUDED on purpose — the board strikes them through
-  /// instead of hiding them, and its own note says why: seeing that 08:40 is
-  /// gone is what makes 09:00 feel like a real appointment rather than a
-  /// suggestion.
-  List<BookingSlot> slotsOn(DateTime day) {
-    final List<BookingSlot> result = slots
-        .where((BookingSlot slot) => slot.isOn(day))
-        .toList();
-    result.sort((BookingSlot a, BookingSlot b) => a.time.compareTo(b.time));
-    return result;
-  }
-
-  @override
-  List<Object?> get props => <Object?>[slots];
 }

@@ -4,33 +4,48 @@ import '../../../../core/error/exceptions.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/api_error_mapper.dart';
 import '../models/availability_model.dart';
+import '../models/establishment_model.dart';
 import '../models/turn_model.dart';
 
-/// Talks to the three endpoints "Agendar" is built from, plus the one that
-/// books.
+/// Talks to the four endpoints the "Agendar" wizard's steps are built from,
+/// plus the one that books.
 ///
 /// ## Page sizes are large on purpose
 ///
-/// Every one of these is paginated and every default page is 10. A clinic with
-/// twelve doctors would silently show ten; a week of 20-minute slots is around
-/// 150 rows, so a day grid built from page 0 would be missing every afternoon
-/// with no error anywhere. The sizes below are ceilings chosen to be past any
-/// realistic count for one clinic, and each one is checked — see
-/// [_warnIfTruncated].
+/// Every one of these is paginated and every default page is 10. A clinic
+/// with more than ten sedes, or a service with more than ten doctors, would
+/// silently show a truncated list with no error anywhere. The sizes below
+/// are ceilings chosen to be past any realistic count for one clinic, and
+/// each one is checked — see [_warnIfTruncated].
 abstract interface class BookingRemoteDataSource {
-  Future<List<BookingDoctorModel>> fetchDoctors();
+  /// Step 1. Fetches the whole first page rather than taking a search term:
+  /// the wizard filters the loaded list locally — see
+  /// `BookingState.visibleEstablishments`.
+  Future<List<EstablishmentModel>> fetchEstablishments();
 
-  Future<List<BookingServiceModel>> fetchServices();
+  /// Step 2's services, scoped to the sede chosen in step 1.
+  Future<List<BookingServiceModel>> fetchServicesForEstablishment(
+    int establishmentId,
+  );
 
-  /// Free and taken slots for one doctor + service, over a date range.
+  /// Step 2's doctors for ONE service, regardless of establishment — the
+  /// backend has no "doctors at this service AND this sede" endpoint.
+  Future<List<BookingDoctorModel>> fetchDoctorsForService(int serviceId);
+
+  /// Step 3's FREE slots, filtered on the SERVER by every parameter given.
   ///
-  /// Taken ones come back too: the board strikes them through rather than
-  /// hiding them, so the filter is on doctor/service/date and NOT on status.
-  Future<List<BookingSlotModel>> fetchSlots({
-    required String doctorId,
+  /// [doctorId] and [date] are optional. When [doctorId] is null, no
+  /// `doctorId` query parameter is sent at all — never a request that
+  /// fetches everyone's slots and drops the wrong ones afterwards. That is
+  /// the whole difference from `clinicore-angular`'s
+  /// `getSchedules`/`loadAvailableSchedules`, which calls the endpoint
+  /// nested under `/api/services/{id}/schedules` (no `doctorId` parameter
+  /// exists there) and filters the doctor out of the response instead.
+  Future<List<BookingSlotModel>> fetchFreeSchedules({
+    required int establishmentId,
     required int serviceId,
-    required DateTime from,
-    required DateTime to,
+    String? doctorId,
+    DateTime? date,
   });
 
   /// Books [scheduleId] for the patient in the token.
@@ -42,58 +57,81 @@ class BookingRemoteDataSourceImpl implements BookingRemoteDataSource {
 
   final Dio _dio;
 
-  static const int _doctorPageSize = 200;
+  static const int _establishmentPageSize = 200;
   static const int _servicePageSize = 200;
+  static const int _doctorPageSize = 50;
 
-  /// A month of 20-minute slots for one doctor is roughly 500. 1000 is the
-  /// ceiling; the range this app asks for is 60 days, and [_warnIfTruncated]
-  /// says so out loud if that ever stops being enough.
-  static const int _slotPageSize = 1000;
+  /// A month of 20-minute FREE slots for one doctor is roughly 500. 1000 is
+  /// the ceiling — a list built from page 0 silently missing the rest is
+  /// worse than one extra digit here.
+  static const int _schedulePageSize = 1000;
 
   @override
-  Future<List<BookingDoctorModel>> fetchDoctors() async {
-    final PageModel<BookingDoctorModel> page = await _getPage(
-      ApiEndpoints.doctors,
-      <String, dynamic>{'page': 0, 'size': _doctorPageSize},
-      BookingDoctorModel.fromJson,
+  Future<List<EstablishmentModel>> fetchEstablishments() async {
+    final PageModel<EstablishmentModel> page = await _getPage(
+      ApiEndpoints.stablishments,
+      <String, dynamic>{'page': 0, 'size': _establishmentPageSize},
+      EstablishmentModel.fromJson,
     );
-    _warnIfTruncated('doctors', page, _doctorPageSize);
+    _warnIfTruncated('stablishments', page, _establishmentPageSize);
     return page.content;
   }
 
   @override
-  Future<List<BookingServiceModel>> fetchServices() async {
+  Future<List<BookingServiceModel>> fetchServicesForEstablishment(
+    int establishmentId,
+  ) async {
     final PageModel<BookingServiceModel> page = await _getPage(
-      ApiEndpoints.services,
+      ApiEndpoints.stablishmentServices(establishmentId),
       <String, dynamic>{'page': 0, 'size': _servicePageSize},
       BookingServiceModel.fromJson,
     );
-    _warnIfTruncated('services', page, _servicePageSize);
+    _warnIfTruncated('stablishment services', page, _servicePageSize);
     return page.content;
   }
 
   @override
-  Future<List<BookingSlotModel>> fetchSlots({
-    required String doctorId,
+  Future<List<BookingDoctorModel>> fetchDoctorsForService(
+    int serviceId,
+  ) async {
+    final PageModel<BookingDoctorModel> page = await _getPage(
+      ApiEndpoints.serviceDoctors(serviceId),
+      <String, dynamic>{'page': 0, 'size': _doctorPageSize},
+      BookingDoctorModel.fromJson,
+    );
+    _warnIfTruncated('service doctors', page, _doctorPageSize);
+    return page.content;
+  }
+
+  @override
+  Future<List<BookingSlotModel>> fetchFreeSchedules({
+    required int establishmentId,
     required int serviceId,
-    required DateTime from,
-    required DateTime to,
+    String? doctorId,
+    DateTime? date,
   }) async {
+    final Map<String, dynamic> query = <String, dynamic>{
+      'page': 0,
+      'size': _schedulePageSize,
+      'serviceId': serviceId,
+      'stablishmentId': establishmentId,
+      // Only what can actually be booked — unlike the old day grid, this
+      // step never shows a taken slot struck through, so nothing above this
+      // line needs one either.
+      'status': 'STATUS_FREE',
+    };
+
+    // Added to the QUERY, never to a `.where(...)` on the response below —
+    // see this method's doc comment for the bug that distinction fixes.
+    if (doctorId != null) query['doctorId'] = doctorId;
+    if (date != null) query['date'] = _isoDate(date);
+
     final PageModel<BookingSlotModel> page = await _getPage(
       ApiEndpoints.schedules,
-      <String, dynamic>{
-        'page': 0,
-        'size': _slotPageSize,
-        'doctorId': doctorId,
-        'serviceId': serviceId,
-        'from': _isoDate(from),
-        'to': _isoDate(to),
-        // No `status`: taken slots are shown struck through, so they have to
-        // come back. See the interface doc.
-      },
+      query,
       BookingSlotModel.fromJson,
     );
-    _warnIfTruncated('schedules', page, _slotPageSize);
+    _warnIfTruncated('free schedules', page, _schedulePageSize);
     return page.content;
   }
 
@@ -135,11 +173,11 @@ class BookingRemoteDataSourceImpl implements BookingRemoteDataSource {
   /// Says so when a ceiling was actually hit.
   ///
   /// The alternative to this line is a screen that quietly shows a subset —
-  /// which for an availability grid means a patient concluding there is no
-  /// appointment when there is. It logs rather than throws: a truncated list is
-  /// still usable, and refusing to render it would be worse than rendering it
-  /// incompletely. It is a signal to paginate properly, not an error the
-  /// patient caused.
+  /// for a list of sedes or a list of slots that means a patient concluding
+  /// there is nothing when there is. It logs rather than throws: a truncated
+  /// list is still usable, and refusing to render it would be worse than
+  /// rendering it incompletely. It is a signal to paginate properly, not an
+  /// error the patient caused.
   void _warnIfTruncated<T>(String what, PageModel<T> page, int requested) {
     if (page.last) return;
     assert(() {
