@@ -49,6 +49,15 @@ class AppointmentsState extends Equatable {
   bool get isEmpty =>
       status == AppointmentsStatus.ready && items.isEmpty;
 
+  /// A reload failed but there is still a list on screen from before this
+  /// attempt. `AppointmentsList` keeps the list up and shows a note instead
+  /// of replacing it with the whole-screen failure card — the same rule
+  /// `HistoryState.isReloadFailure` applies, and it matters most on
+  /// pull-to-refresh: a network blip mid-gesture must not swallow the
+  /// appointments the patient was already reading.
+  bool get isReloadFailure =>
+      status == AppointmentsStatus.failure && items.isNotEmpty;
+
   bool get isSessionExpired => failure is SessionExpiredFailure;
 
   bool get isCancelling => cancellingId != null;

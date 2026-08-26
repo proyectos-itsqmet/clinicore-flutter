@@ -23,6 +23,7 @@ import 'package:clinicore_flutter/features/home/presentation/blocs/appointments/
 import 'package:clinicore_flutter/features/home/presentation/blocs/booking/booking_bloc.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/coverage/coverage_bloc.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/history/history_bloc.dart';
+import 'package:clinicore_flutter/features/home/presentation/blocs/password/password_bloc.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/profile/profile_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -132,6 +133,7 @@ HomeFakes setUpHomeDependencies() {
 
   sl.registerLazySingleton(() => GetMyProfile(sl()));
   sl.registerLazySingleton(() => UpdateMyContact(sl()));
+  sl.registerLazySingleton(() => ChangeMyPassword(sl()));
   sl.registerLazySingleton(() => GetMyAppointments(sl()));
   sl.registerLazySingleton(() => CancelAppointment(sl()));
   sl.registerLazySingleton(() => WatchTurnUpdates(sl()));
@@ -180,6 +182,10 @@ HomeFakes setUpHomeDependencies() {
 
   sl.registerFactory<CoverageBloc>(
     () => CoverageBloc(getMyCoverages: sl()),
+  );
+
+  sl.registerFactory<PasswordBloc>(
+    () => PasswordBloc(changeMyPassword: sl()),
   );
 
   return HomeFakes(

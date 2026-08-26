@@ -173,8 +173,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   Widget _buildForm(BuildContext context, RecoveryState state) {
-    final String value = _password.text;
-
     return AuthFormShell(
       kicker: 'Paso 3 de 3',
       title: 'Elige una nueva.',
@@ -213,25 +211,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
         ),
 
-        AppCard(
-          padding: const EdgeInsets.all(AppSpacing.cardPad),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: AppSpacing.md,
-            children: <Widget>[
-              const AppKicker(text: 'Debe tener', size: 11),
-              _Rule(label: 'Al menos 8 caracteres', met: value.length >= 8),
-              _Rule(
-                label: 'Al menos una letra',
-                met: RegExp(r'[A-Za-z]').hasMatch(value),
-              ),
-              _Rule(
-                label: 'Al menos un numero',
-                met: RegExp(r'\d').hasMatch(value),
-              ),
-            ],
-          ),
-        ),
+        // The live checklist, shared with "Cambiar contrasena" so the two
+        // screens can never disagree about what a valid password is.
+        PasswordRulesCard(value: _password.text),
 
         AppButton(
           label: 'Guardar contrasena',
@@ -239,48 +221,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           fullWidth: true,
           isLoading: state.isSubmitting,
           onPressed: _submit,
-        ),
-      ],
-    );
-  }
-}
-
-/// One line of the live checklist. Met rules go `ok` green with a check; unmet
-/// ones stay `ink-3` with a hollow marker — never red, because a rule the user
-/// has not reached yet is not an error.
-class _Rule extends StatelessWidget {
-  const _Rule({required this.label, required this.met});
-
-  final String label;
-  final bool met;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      spacing: AppSpacing.md,
-      children: <Widget>[
-        AnimatedContainer(
-          duration: AppMotion.tone,
-          width: 18,
-          height: 18,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: met ? AppColors.ok : Colors.transparent,
-            border: met ? null : Border.all(color: AppColors.line, width: 1.5),
-          ),
-          child: met
-              ? const Icon(AppIcons.success, size: 12, color: AppColors.surface)
-              : null,
-        ),
-        Expanded(
-          child: Text(
-            label,
-            style: AppTypography.cap.copyWith(
-              color: met ? AppColors.ok : AppColors.ink3,
-              fontWeight: met ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
         ),
       ],
     );

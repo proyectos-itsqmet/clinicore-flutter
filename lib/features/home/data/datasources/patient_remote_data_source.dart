@@ -26,6 +26,20 @@ abstract interface class PatientRemoteDataSource {
   /// The two differ whenever the server ignored a field, which for identity
   /// data is always.
   Future<PatientModel> updateMyContact(PatientContactUpdate update);
+
+  /// Sets a new password for the signed-in patient.
+  ///
+  /// Returns nothing: the 200 body is a confirmation message, and there is no
+  /// state for the app to update — the JWT in hand is stateless and keeps
+  /// working, because `PatientService.updatePassword` only re-encodes the
+  /// stored hash.
+  ///
+  /// Both values go to the server because the server is what compares them.
+  /// See [ApiEndpoints.patientChangePassword] for what it does NOT check.
+  Future<void> changeMyPassword({
+    required String password,
+    required String repeatedPassword,
+  });
 }
 
 class PatientRemoteDataSourceImpl implements PatientRemoteDataSource {
@@ -53,6 +67,24 @@ class PatientRemoteDataSourceImpl implements PatientRemoteDataSource {
         data: PatientContactUpdateModel(update).toJson(),
       );
       return PatientModel.fromJson(_asMap(response.data));
+    } on DioException catch (error) {
+      throw mapDioException(error);
+    }
+  }
+
+  @override
+  Future<void> changeMyPassword({
+    required String password,
+    required String repeatedPassword,
+  }) async {
+    try {
+      await _dio.put<dynamic>(
+        ApiEndpoints.patientChangePassword,
+        data: <String, dynamic>{
+          'password': password,
+          'repeatedPassword': repeatedPassword,
+        },
+      );
     } on DioException catch (error) {
       throw mapDioException(error);
     }

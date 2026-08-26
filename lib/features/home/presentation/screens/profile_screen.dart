@@ -14,11 +14,11 @@ import '../widgets/profile_scope.dart';
 
 /// The "Mi perfil" tab.
 ///
-/// An identity card at the top, then the three destinations, then the way
+/// An identity card at the top, then the account destinations, then the way
 /// out. The order is deliberate: who you are, what you can read, and only at
 /// the very bottom the action you cannot undo by accident.
 ///
-/// "Cerrar sesion" is separated from the three rows by real space rather than
+/// "Cerrar sesion" is separated from those rows by real space rather than
 /// sitting fourth in the list — a destructive action one thumb-width below
 /// "Politica de privacidad" gets tapped by mistake.
 class ProfileScreen extends StatelessWidget {
@@ -26,53 +26,12 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ProfileScope(child: _ProfileView(onSignOut: _confirmSignOut));
-  }
-
-  /// Signing out on a shared phone loses nothing, but on a personal one it
-  /// means re-entering a password to see tomorrow's appointment. Worth one
-  /// tap of confirmation.
-  Future<void> _confirmSignOut(BuildContext context) async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Cerrar sesion?'),
-        content: const Text(
-          'Vas a tener que ingresar de nuevo para ver tus citas.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              'Cancelar',
-              style: AppTypography.button.copyWith(color: AppColors.ink2),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(
-              'Cerrar sesion',
-              style: AppTypography.button.copyWith(color: AppColors.emergency),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    // Report the intent; do NOT navigate. AuthBloc clears the token, the
-    // router's refreshListenable notices the session is gone, and the guard
-    // sends the app to login. One place decides where an unauthenticated
-    // patient belongs — see AppRouter._redirect.
-    context.read<AuthBloc>().add(const AuthSignOutRequested());
+    return const ProfileScope(child: _ProfileView());
   }
 }
 
 class _ProfileView extends StatelessWidget {
-  const _ProfileView({required this.onSignOut});
-
-  final Future<void> Function(BuildContext) onSignOut;
+  const _ProfileView();
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +51,7 @@ class _ProfileView extends StatelessWidget {
             const AppSectionHeading(kicker: 'Tu cuenta', title: 'Mi perfil.'),
 
             // The identity card is the ONLY thing on this screen that needs
-            // the record. The three destinations and the sign-out below are
+            // the record. The destinations and the sign-out below are
             // navigation, and gating them behind a fetch would leave a patient
             // with no connection unable to reach "Cerrar sesion".
             BlocBuilder<ProfileBloc, ProfileState>(
@@ -114,12 +73,20 @@ class _ProfileView extends StatelessWidget {
               },
             ),
 
-            // The three destinations the brief asks for.
+            // The destinations, ordered by how often they are needed: the
+            // record first, then the one setting a patient actually changes,
+            // then the two documents almost nobody re-reads.
             AppListRow(
               icon: AppIcons.personalInfo,
               label: 'Mi informacion',
               supporting: 'Datos personales y de contacto',
               onTap: () => context.push(AppPath.personalInfoScreen),
+            ),
+            AppListRow(
+              icon: AppIcons.password,
+              label: 'Cambiar contrasena',
+              supporting: 'Elegi una nueva para tu cuenta',
+              onTap: () => context.push(AppPath.changePasswordScreen),
             ),
             AppListRow(
               icon: AppIcons.terms,

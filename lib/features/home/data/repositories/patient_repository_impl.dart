@@ -39,4 +39,18 @@ class PatientRepositoryImpl implements PatientRepository {
       return model.toEntity();
     });
   }
+
+  @override
+  Future<Either<Failure, Unit>> changeMyPassword({
+    required String password,
+    required String repeatedPassword,
+  }) {
+    return guardFailure(() async {
+      await remote.changeMyPassword(
+        password: password,
+        repeatedPassword: repeatedPassword,
+      );
+      return unit;
+    });
+  }
 }

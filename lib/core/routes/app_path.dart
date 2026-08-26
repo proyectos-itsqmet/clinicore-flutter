@@ -56,6 +56,30 @@ class AppPath {
   static const termsScreen = '/terminos';
   static const privacyScreen = '/privacidad';
 
+  /// Changing your own password from inside a live session.
+  ///
+  /// NOT under [forgotPasswordScreen], and the prefix is what keeps them
+  /// apart: [isAuthFlow] matches `/recuperar-contrasena` with `startsWith`,
+  /// so a path nested there would be classified as part of the signed-OUT
+  /// recovery flow — and the guard would bounce a signed-IN patient straight
+  /// back to `/agendar` the moment they opened it.
+  static const changePasswordScreen = '/cambiar-contrasena';
+
+  /// One visit of the clinical history, in full.
+  ///
+  /// A TOP-LEVEL route rather than a child of [historyScreen], for the same
+  /// reason [personalInfoScreen] is one: a child of a shell branch renders
+  /// INSIDE the branch's navigator, which leaves the bottom nav bar over a
+  /// medical record that wants the whole screen. It is also what puts this
+  /// through `AppRouter._redirect`, so a session that dies while a diagnosis
+  /// is on screen takes the screen with it.
+  ///
+  /// The `HistoryEntry` travels as `GoRouterState.extra` — it is a joined
+  /// object with no id of its own to put in the path, and re-fetching it here
+  /// would cost a second audited clinical read. See `HistoryDetailScreen` for
+  /// what happens when that hand-off is missing.
+  static const historyDetailScreen = '/historial/visita';
+
   /// Locations reachable with or without a session.
   ///
   /// The two legal documents, and only those. A patient has to be able to read

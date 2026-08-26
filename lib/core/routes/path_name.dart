@@ -26,6 +26,10 @@ class PathName {
 
   //! Profile
   static const personalInfoScreen = 'mi-informacion';
+  static const changePasswordScreen = 'cambiar-contrasena';
   static const termsScreen = 'terminos';
   static const privacyScreen = 'privacidad';
+
+  //! History
+  static const historyDetailScreen = 'historial-visita';
 }

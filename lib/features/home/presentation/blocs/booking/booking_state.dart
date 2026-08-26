@@ -128,6 +128,28 @@ class BookingState extends Equatable {
   /// bypass it.
   bool canGoBackTo(BookingStep target) => target.index < step.index;
 
+  /// The step one back from here, or null when there is nothing behind this
+  /// one INSIDE the wizard.
+  ///
+  /// This is the single definition of what "back" means in this flow, and it
+  /// has two callers on purpose: the header's "Volver" link and the device's
+  /// own back button (`_BookingBackGuard`). When the two disagreed — which is
+  /// the state this screen shipped in, with the header knowing how to step
+  /// back and the hardware button not — the patient got thrown out of a
+  /// half-filled wizard by the gesture they use most.
+  ///
+  /// Step 4 returns null even though [canGoBackTo] would happily accept step
+  /// 2 or 3 from there: the turn is already booked, so there is no selection
+  /// left to undo. Stepping "back" into the schedule list would show a
+  /// chooser for a slot the server already took. What back does there is
+  /// decided by `_BookingBackGuard`, not here.
+  BookingStep? get previousStep => switch (step) {
+    BookingStep.establishment => null,
+    BookingStep.serviceAndDoctor => BookingStep.establishment,
+    BookingStep.schedule => BookingStep.serviceAndDoctor,
+    BookingStep.confirmed => null,
+  };
+
   BookingState copyWith({
     BookingStatus? status,
     BookingStep? step,

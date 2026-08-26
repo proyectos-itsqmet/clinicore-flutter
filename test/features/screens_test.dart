@@ -13,6 +13,9 @@ import 'package:clinicore_flutter/features/home/domain/entities/clinical_record.
 import 'package:clinicore_flutter/features/home/domain/entities/coverage.dart';
 import 'package:clinicore_flutter/features/home/domain/entities/establishment.dart';
 import 'package:clinicore_flutter/features/home/domain/entities/patient_profile.dart';
+import 'package:clinicore_flutter/features/home/domain/entities/history_entry.dart';
+import 'package:clinicore_flutter/features/home/presentation/screens/change_password_screen.dart';
+import 'package:clinicore_flutter/features/home/presentation/screens/history_detail_screen.dart';
 import 'package:clinicore_flutter/features/home/presentation/screens/history_screen.dart';
 import 'package:clinicore_flutter/features/home/presentation/screens/personal_info_screen.dart';
 import 'package:clinicore_flutter/shared/helpers/date_labels.dart';
@@ -127,6 +130,82 @@ void main() {
       expect(find.text('PASO 1 DE 4'), findsOneWidget);
       expect(find.text('Sede Norte'), findsOneWidget);
       expect(fakes.booking.getEstablishmentsCallCount, 1);
+    });
+
+    /// The device's own back button, which used to leave the app from the
+    /// middle of the wizard — see `_BookingBackGuard`.
+    ///
+    /// `handlePopRoute` is what the platform sends on a back gesture, so
+    /// these go through the same path a real press does rather than calling
+    /// the callback directly.
+    group('the device back button', () {
+      testWidgets('on step 2 goes back one step instead of leaving', (
+        tester,
+      ) async {
+        await pumpApp(tester, const BookingScreen());
+        await tester.pump();
+        await _tapLabel(tester, 'Sede Norte');
+        await tester.pump();
+        expect(find.text('PASO 2 DE 4'), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pump(AppMotion.morph);
+
+        expect(find.text('PASO 1 DE 4'), findsOneWidget);
+        expect(find.text('Sede Norte'), findsOneWidget);
+      });
+
+      testWidgets('on step 3 keeps the sede and the service already chosen', (
+        tester,
+      ) async {
+        await goToScheduleStep(tester);
+        expect(find.text('PASO 3 DE 4'), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pump(AppMotion.morph);
+
+        // Back is ONE step, not out: the doctor list for the sede picked in
+        // step 1 is still on screen. Losing all of it to the most-used
+        // gesture on the phone is the bug this replaced.
+        expect(find.text('PASO 2 DE 4'), findsOneWidget);
+        expect(find.text('Ana Torres'), findsOneWidget);
+      });
+
+      testWidgets('on step 1 bubbles, because there is nothing to protect', (
+        tester,
+      ) async {
+        await pumpApp(tester, const BookingScreen());
+        await tester.pump();
+
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+
+        // Still step 1 and no exception: the guard let the gesture through
+        // to the platform rather than swallowing it into a dead end.
+        expect(find.text('PASO 1 DE 4'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('on the ticket starts a fresh booking, keeping the sedes', (
+        tester,
+      ) async {
+        await goToScheduleStep(tester);
+        await _tapLabel(tester, slot10amLabel());
+        await tester.pump();
+        await _tapLabel(tester, 'Confirmar turno', settle: AppMotion.press);
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(find.text('PASO 4 DE 4'), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pump(AppMotion.morph);
+
+        // Exactly what "Agendar otro turno" does. Dropping the patient out of
+        // the app one gesture after booking reads as a crash, at the moment
+        // they are least sure it worked.
+        expect(find.text('PASO 1 DE 4'), findsOneWidget);
+        expect(find.text('Sede Norte'), findsOneWidget);
+        expect(fakes.booking.getEstablishmentsCallCount, 1);
+      });
     });
 
     testWidgets(
@@ -297,6 +376,84 @@ void main() {
 
       expect(find.text('No tienes citas agendadas'), findsNothing);
       expect(find.text('Reintentar'), findsOneWidget);
+    });
+
+    group('pull to refresh', () {
+      /// Pulls the list down far enough to arm [RefreshIndicator] and lets it
+      /// run. `drag` and not `fling`: a fling leaves a ballistic simulation
+      /// running that `pump` has to chase, and this only needs the threshold
+      /// crossed.
+      Future<void> pullDown(WidgetTester tester) async {
+        await tester.drag(
+          find.byType(SingleChildScrollView),
+          const Offset(0, 320),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+      }
+
+      testWidgets('reloads the OPEN tab', (tester) async {
+        await pumpApp(tester, const AppointmentsScreen());
+        await tester.pump();
+        expect(fakes.appointments.requestedScopes, <AppointmentScope>[
+          AppointmentScope.upcoming,
+        ]);
+
+        await pullDown(tester);
+
+        expect(fakes.appointments.requestedScopes, <AppointmentScope>[
+          AppointmentScope.upcoming,
+          AppointmentScope.upcoming,
+        ]);
+      });
+
+      testWidgets('never touches the tab that is not open', (tester) async {
+        // Each scope costs one HTTP request per status server-side, so
+        // refreshing the list nobody is looking at spends real requests on
+        // nothing — and "Pasadas" may not even have a bloc yet.
+        await pumpApp(tester, const AppointmentsScreen());
+        await tester.pump();
+
+        await pullDown(tester);
+
+        expect(
+          fakes.appointments.requestedScopes.contains(AppointmentScope.past),
+          isFalse,
+        );
+      });
+
+      testWidgets('a failed refresh keeps the list that was already there', (
+        tester,
+      ) async {
+        fakes.appointments.results[AppointmentScope.upcoming] =
+            Right<Failure, AppointmentPage>(
+              AppointmentPage(
+                items: testUpcoming,
+                page: 0,
+                isLast: true,
+                totalElements: 2,
+              ),
+            );
+
+        await pumpApp(tester, const AppointmentsScreen());
+        await tester.pump();
+        expect(find.text('Pediatria'), findsOneWidget);
+
+        // The blip happens DURING the gesture — the most likely moment for
+        // one, and the worst possible time to blank the screen.
+        fakes.appointments.results[AppointmentScope.upcoming] =
+            const Left<Failure, AppointmentPage>(NetworkFailure());
+        await pullDown(tester);
+
+        // The appointments the patient was reading are still there, with the
+        // failure reported as a line above them instead of replacing them.
+        expect(find.text('Pediatria'), findsOneWidget);
+        expect(find.text('Reintentar'), findsNothing);
+        expect(
+          find.textContaining('Sin conexion'),
+          findsOneWidget,
+        );
+      });
     });
 
     /// `AppointmentCard.actions` is documented as hosting "Reprogramar,
@@ -620,13 +777,14 @@ void main() {
     late HomeFakes fakes;
     setUp(() => fakes = setUpHomeDependencies());
 
-    testWidgets('shows the three destinations the brief asks for', (
+    testWidgets('shows every account destination, sign-out included', (
       tester,
     ) async {
       await pumpApp(tester, const ProfileScreen());
       await tester.pump();
 
       expect(find.text('Mi informacion'), findsOneWidget);
+      expect(find.text('Cambiar contrasena'), findsOneWidget);
       expect(find.text('Terminos y condiciones'), findsOneWidget);
       expect(find.text('Politica de privacidad'), findsOneWidget);
       expect(find.text('Cerrar sesion'), findsOneWidget);
@@ -679,8 +837,7 @@ void main() {
     }
 
     testWidgets(
-      'renders a documented visit with its diagnosis and every prescription '
-      'line item',
+      'the card summarises a documented visit and says what is behind the tap',
       (tester) async {
         seedAttended(testAttended);
         fakes.clinical.encountersResult =
@@ -691,11 +848,20 @@ void main() {
         await pumpApp(tester, const HistoryScreen());
         await tester.pump();
 
+        // The one clinical line the list carries: it is what a patient scans
+        // for when looking for a specific visit.
         expect(find.text('Migrana tensional'), findsOneWidget);
-        expect(find.text('Ibuprofeno'), findsOneWidget);
-        expect(find.text('400mg / Cada 8 horas / 5 dias'), findsOneWidget);
-        expect(find.text('Paracetamol'), findsOneWidget);
-        expect(find.text('500mg / Cada 6 horas / 3 dias'), findsOneWidget);
+
+        // Two medications across the fixture's single prescription, counted
+        // rather than listed — the count is what tells the patient there is a
+        // recipe to open.
+        expect(find.text('2 medicamentos'), findsOneWidget);
+
+        // The line items themselves belong to the detail screen. Asserting
+        // their ABSENCE here is the whole point of the split: a list that
+        // renders every dose is a list nobody can scan.
+        expect(find.text('Ibuprofeno'), findsNothing);
+        expect(find.text('Paracetamol'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -716,6 +882,10 @@ void main() {
         // same as `AppointmentsScreen`'s card — see `_EntryCard`.
         expect(find.textContaining('Luis Mora'), findsOneWidget);
         expect(find.text('Migrana tensional'), findsOneWidget);
+
+        // The undocumented visit says so on its own card rather than looking
+        // identical to a documented one with a short diagnosis.
+        expect(find.text('Sin resumen clinico'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -837,6 +1007,180 @@ void main() {
 
       expect(selected, 2);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('HistoryDetailScreen', () {
+    setUp(setUpHomeDependencies);
+
+    /// The fixture's documented visit, joined the way `HistoryBloc` joins it.
+    HistoryEntry documented() => HistoryEntry(
+      appointment: testAttended[0],
+      encounter: testEncounters[0],
+      prescriptions: testPrescriptions,
+    );
+
+    testWidgets('renders every prescription line item in full', (tester) async {
+      await pumpApp(tester, HistoryDetailScreen(entry: documented()));
+      await tester.pump();
+
+      // What the card deliberately does NOT carry — see the HistoryScreen
+      // group. Each medication keeps its OWN dose, frequency and duration:
+      // collapsing them loses exactly the detail a patient needs to take the
+      // drug correctly.
+      expect(find.text('Ibuprofeno'), findsOneWidget);
+      expect(find.text('400mg'), findsOneWidget);
+      expect(find.text('Cada 8 horas'), findsOneWidget);
+      expect(find.text('5 dias'), findsOneWidget);
+      expect(find.text('Tomar con alimentos'), findsOneWidget);
+
+      expect(find.text('Paracetamol'), findsOneWidget);
+      expect(find.text('500mg'), findsOneWidget);
+      expect(find.text('Cada 6 horas'), findsOneWidget);
+      expect(find.text('3 dias'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('renders the clinical fields the card cannot fit', (
+      tester,
+    ) async {
+      await pumpApp(tester, HistoryDetailScreen(entry: documented()));
+      await tester.pump();
+
+      expect(find.text('Dolor de cabeza persistente'), findsOneWidget);
+      expect(find.text('Migrana tensional'), findsOneWidget);
+      // The encounter's doctor wins over the turn's — it is who actually
+      // wrote the record.
+      expect(find.text('Ana Torres'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('shows the ticket number, which lives nowhere else', (
+      tester,
+    ) async {
+      await pumpApp(tester, HistoryDetailScreen(entry: documented()));
+      await tester.pump();
+
+      // Once a turn leaves "Mis citas" this is the only screen in the app
+      // that still carries the number the waiting room called.
+      expect(find.text('Turno'), findsOneWidget);
+      expect(find.text(testAttended[0].ticket.toString()), findsOneWidget);
+    });
+
+    testWidgets('an undocumented visit says so instead of looking broken', (
+      tester,
+    ) async {
+      await pumpApp(
+        tester,
+        HistoryDetailScreen(entry: HistoryEntry(appointment: testAttended[1])),
+      );
+      await tester.pump();
+
+      expect(
+        find.textContaining('todavia no tiene resumen clinico'),
+        findsOneWidget,
+      );
+      // The visit's own facts still render — that is the point of opening it.
+      //  renders uppercase — same as the wizard's 'PASO 1 DE 4'.
+      expect(find.text('LA VISITA'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a lost hand-off reads as "could not open", never as "gone"', (
+      tester,
+    ) async {
+      // `extra` is in-memory only: a cold start on this URL arrives with
+      // null. Telling a patient their visit does not exist would be the same
+      // class of lie as an empty state over a failed request.
+      await pumpApp(tester, const HistoryDetailScreen(entry: null));
+      await tester.pump();
+
+      expect(find.text('No pudimos abrir esta visita'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('ChangePasswordScreen', () {
+    late HomeFakes fakes;
+    setUp(() => fakes = setUpHomeDependencies());
+
+    Future<void> fillAndSubmit(
+      WidgetTester tester, {
+      required String password,
+      required String confirm,
+    }) async {
+      await tester.enterText(find.byType(TextFormField).at(0), password);
+      await tester.enterText(find.byType(TextFormField).at(1), confirm);
+      await tester.pump();
+      await _tapLabel(tester, 'Guardar contrasena', settle: AppMotion.press);
+      await tester.pump();
+    }
+
+    testWidgets('sends BOTH values, because the server is what compares them', (
+      tester,
+    ) async {
+      await pumpApp(tester, const ChangePasswordScreen());
+      await tester.pump();
+
+      await fillAndSubmit(tester, password: 'nueva1234', confirm: 'nueva1234');
+
+      expect(fakes.patient.lastPasswordChange?.password, 'nueva1234');
+      expect(fakes.patient.lastPasswordChange?.repeated, 'nueva1234');
+    });
+
+    testWidgets('a mismatch never reaches the network', (tester) async {
+      await pumpApp(tester, const ChangePasswordScreen());
+      await tester.pump();
+
+      await fillAndSubmit(tester, password: 'nueva1234', confirm: 'otra12345');
+
+      // The server would answer 400 for this, but making the patient wait for
+      // a round trip to learn they mistyped is the wrong shape of feedback.
+      expect(fakes.patient.lastPasswordChange, isNull);
+      expect(find.text('Las contrasenas no coinciden'), findsOneWidget);
+    });
+
+    testWidgets('a password below the rules never reaches the network', (
+      tester,
+    ) async {
+      await pumpApp(tester, const ChangePasswordScreen());
+      await tester.pump();
+
+      await fillAndSubmit(tester, password: 'corta', confirm: 'corta');
+
+      expect(fakes.patient.lastPasswordChange, isNull);
+      expect(find.text('Al menos 8 caracteres'), findsWidgets);
+    });
+
+    testWidgets('a rejected change shows the SERVER message on the form', (
+      tester,
+    ) async {
+      fakes.patient.passwordResult = const Left<Failure, Unit>(
+        ValidationFailure(message: 'La contrasena ya fue usada'),
+      );
+
+      await pumpApp(tester, const ChangePasswordScreen());
+      await tester.pump();
+
+      await fillAndSubmit(tester, password: 'nueva1234', confirm: 'nueva1234');
+
+      // Next to the fields it belongs to, not as a snackbar that slides away
+      // before it is read.
+      expect(find.text('La contrasena ya fue usada'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('there is no "contrasena actual" field to fake safety with', (
+      tester,
+    ) async {
+      await pumpApp(tester, const ChangePasswordScreen());
+      await tester.pump();
+
+      // `ChangePasswordBody` has nowhere to put it and the controller
+      // verifies nothing beyond the token, so a field here would be theatre.
+      // See `ApiEndpoints.patientChangePassword`.
+      expect(find.byType(TextFormField), findsNWidgets(2));
+      expect(find.textContaining('actual'), findsNothing);
     });
   });
 }

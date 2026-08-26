@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constant/app_icons.dart';
 import '../../../../core/di/injection.dart';
+import '../../../../core/routes/app_path.dart';
 import '../../../../core/theme/theme.dart';
 import '../../../../shared/helpers/date_labels.dart';
 import '../../../../shared/ui/atoms/atoms.dart';
@@ -36,6 +38,20 @@ import '../blocs/history/history_bloc.dart';
 /// it, with only what a turn itself carries (date, specialty, doctor,
 /// location), because a visit the clinic recorded is still a visit even
 /// before someone writes it up.
+///
+/// ## The card is a summary; the record is a screen
+///
+/// Each row identifies its visit — specialty, date, doctor, sede, and the
+/// diagnosis as one line — and opens [HistoryDetailScreen] for everything
+/// else: hour, ticket number, the doctor's clinical notes, and the full
+/// prescription with each medication's dose, frequency, duration and
+/// instructions. Rendering all of that inline would cost the list the one job
+/// it has, which is letting a patient FIND a visit among years of them: five
+/// fully expanded visits is a page and a half of scrolling before the second
+/// entry is even on screen.
+///
+/// The detail screen re-reads nothing — see its doc for why that matters
+/// here specifically.
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
 
@@ -197,12 +213,17 @@ class _Year {
   final String year;
   final List<HistoryEntry> entries;
 }
-
-/// One recorded visit, enriched with its clinical summary when there is one.
+/// One recorded visit, as a row you can scan and tap.
 ///
-/// Still no `onTap` and no chevron: the summary and the prescription render
-/// INLINE on the card now that the data exists, so there is nothing a tap
-/// would open that is not already on screen.
+/// It carries what IDENTIFIES the visit — specialty, date, doctor, sede — and
+/// one line of the diagnosis, then hands the rest to [HistoryDetailScreen].
+/// The pills say what is waiting behind the tap, so an entry with a
+/// prescription is distinguishable from one without it before opening
+/// anything.
+///
+/// It is tappable even when there is no encounter yet: the visit's own facts
+/// — the hour, the ticket number, the service — are worth reading on their
+/// own, and a row that refuses to open reads as broken rather than as empty.
 class _EntryCard extends StatelessWidget {
   const _EntryCard({required this.entry});
 
@@ -212,10 +233,20 @@ class _EntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final Appointment appointment = entry.appointment;
     final EncounterRecord? encounter = entry.encounter;
-    final DateTime? when = appointment.finishedAt ?? appointment.date;
+    final DateTime? when =
+        encounter?.visitDate ?? appointment.finishedAt ?? appointment.date;
+
+    // Every medication across every prescription for this visit. Counted
+    // rather than listed: the count is what tells a patient there is a recipe
+    // to open, and the detail is where it can be read correctly.
+    final int medications = entry.prescriptions.fold<int>(
+      0,
+      (int total, PrescriptionRecord p) => total + p.items.length,
+    );
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.cardPad),
+      onTap: () => context.push(AppPath.historyDetailScreen, extra: entry),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: AppSpacing.md,
@@ -238,7 +269,10 @@ class _EntryCard extends StatelessWidget {
                     Text(
                       <String>[
                         if (when != null) shortDate(when),
-                        if (appointment.doctorName != null)
+                        if (appointment.time != null) appointment.time!,
+                        if (encounter?.doctorFullName != null)
+                          encounter!.doctorFullName!
+                        else if (appointment.doctorName != null)
                           appointment.doctorName!,
                       ].join(' / '),
                       style: AppTypography.cap,
@@ -246,78 +280,57 @@ class _EntryCard extends StatelessWidget {
                   ],
                 ),
               ),
+              const Icon(
+                AppIcons.chevronRight,
+                size: 16,
+                color: AppColors.ink3,
+              ),
             ],
           ),
-          if (appointment.locationName != null)
-            AppPill(label: appointment.locationName!, dense: true),
 
-          // The clinical summary — absent for a visit nobody has documented
-          // yet, which is expected, not an error. See the screen's doc.
+          // What is inside, before the tap. `Wrap` and not `Row`: a sede name
+          // plus two pills overflows a phone's width, and a clipped pill
+          // reads as a rendering bug.
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: <Widget>[
+              if (appointment.locationName != null)
+                AppPill(label: appointment.locationName!, dense: true),
+              if (medications > 0)
+                AppPill(
+                  label: medications == 1
+                      ? '1 medicamento'
+                      : '$medications medicamentos',
+                  tone: AppPillTone.ok,
+                  dense: true,
+                ),
+              if (encounter == null)
+                const AppPill(
+                  label: 'Sin resumen clinico',
+                  tone: AppPillTone.plain,
+                  dense: true,
+                ),
+            ],
+          ),
+
+          // The one clinical line worth putting in a list: it is what a
+          // patient scans for when they are looking for a specific visit.
+          // Capped at two lines — the whole text is one tap away, and a card
+          // that grows with the doctor's typing breaks the rhythm of the
+          // list.
           if (encounter != null) ...<Widget>[
             const AppHairline(),
-            AppSummaryRow(label: 'Motivo', value: encounter.reasonForVisit),
-            AppSummaryRow(label: 'Diagnostico', value: encounter.diagnosis),
-          ],
-
-          // Every medication gets its OWN row with its OWN dosage —
-          // collapsing a prescription into one paragraph loses exactly the
-          // detail a patient needs to take the drug correctly.
-          if (entry.prescriptions.isNotEmpty) ...<Widget>[
-            const AppHairline(),
-            const AppKicker(text: 'Receta digital', size: 11),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: AppSpacing.md,
-              children: <Widget>[
-                for (final PrescriptionRecord prescription
-                    in entry.prescriptions)
-                  for (final PrescriptionItemEntry item in prescription.items)
-                    _PrescriptionItemRow(item: item),
-              ],
+            Text('Diagnostico', style: AppTypography.meta),
+            Text(
+              encounter.diagnosis,
+              style: AppTypography.cap,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],
       ),
-    );
-  }
-}
-
-/// One medication line: what it is, how much, how often, for how long — and
-/// the instructions when the doctor left any.
-class _PrescriptionItemRow extends StatelessWidget {
-  const _PrescriptionItemRow({required this.item});
-
-  final PrescriptionItemEntry item;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: AppSpacing.xxs,
-      children: <Widget>[
-        Row(
-          spacing: AppSpacing.sm,
-          children: <Widget>[
-            const Icon(
-              AppIcons.prescription,
-              size: 14,
-              color: AppColors.ink3,
-            ),
-            Expanded(
-              child: Text(
-                item.medication,
-                style: AppTypography.meta.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        Text(
-          '${item.dosage} / ${item.frequency} / ${item.duration}',
-          style: AppTypography.cap,
-        ),
-        if (item.instructions != null)
-          Text(item.instructions!, style: AppTypography.cap),
-      ],
     );
   }
 }
