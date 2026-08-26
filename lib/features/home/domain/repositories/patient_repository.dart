@@ -18,4 +18,20 @@ abstract interface class PatientRepository {
   Future<Either<Failure, PatientProfile>> updateMyContact(
     PatientContactUpdate update,
   );
+
+  /// Sets a new password for the signed-in patient.
+  ///
+  /// Returns [Unit] and not the profile: a password is not part of
+  /// [PatientProfile] and never comes back from the server, so there is
+  /// nothing for a caller to render. What it succeeded at is the whole
+  /// answer.
+  ///
+  /// The session survives — the token is stateless and the server only
+  /// re-encodes the stored hash, so a patient who changes their password from
+  /// inside the app is not signed out. That differs from the RECOVERY flow,
+  /// where the server clears the cookie deliberately.
+  Future<Either<Failure, Unit>> changeMyPassword({
+    required String password,
+    required String repeatedPassword,
+  });
 }

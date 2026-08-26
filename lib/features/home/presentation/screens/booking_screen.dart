@@ -32,6 +32,13 @@ import '../blocs/booking/booking_bloc.dart';
 /// one, is what a checkout flow on a phone already does, and it needs no tab
 /// strip to enforce forward-only progress — there is simply no widget on
 /// screen that skips ahead.
+///
+/// ## The device's back button is part of the wizard
+///
+/// See [_BookingBackGuard]. The short version: this screen is the root of a
+/// shell branch, so without that guard the hardware back button had nothing
+/// to pop and left the app entirely — from step 3, with a sede, a service, a
+/// doctor and a slot already chosen.
 class BookingScreen extends StatelessWidget {
   const BookingScreen({super.key});
 
@@ -49,52 +56,137 @@ class _BookingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Step 1's search box is this feature's first raw `TextField` — every
-    // other home screen only uses `AppButton`/`AppChip`/`AppCard`, which
-    // wrap their OWN `Material` internally. In production this screen sits
-    // inside `HomeScreen`'s `Scaffold`, which already provides one; this
-    // `transparency` Material is what makes the screen correct on its own
-    // too, with no visual change either way.
-    return Material(
-      type: MaterialType.transparency,
-      child: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(
-            left: AppSpacing.pad,
-            right: AppSpacing.pad,
-            top: AppSpacing.sectionY * 0.5,
-            // With `extendBody` on the shell, this is the nav bar's height.
-            bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
+    return BlocConsumer<BookingBloc, BookingState>(
+      listenWhen: (BookingState previous, BookingState current) =>
+          current.isSessionExpired && !previous.isSessionExpired,
+      listener: (BuildContext context, BookingState state) {
+        context.read<AuthBloc>().add(const AuthSessionExpired());
+      },
+      builder: (BuildContext context, BookingState state) {
+        // The guard is OUTSIDE the scroll view rather than around one step:
+        // it has to be registered with this route for as long as the wizard
+        // is on screen, not only while a particular step is drawn.
+        return _BookingBackGuard(
+          state: state,
+          // Step 1's search box is this feature's first raw `TextField` —
+          // every other home screen only uses `AppButton`/`AppChip`/
+          // `AppCard`, which wrap their OWN `Material` internally. In
+          // production this screen sits inside `HomeScreen`'s `Scaffold`,
+          // which already provides one; this `transparency` Material is what
+          // makes the screen correct on its own too, with no visual change
+          // either way.
+          child: Material(
+            type: MaterialType.transparency,
+            child: SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  left: AppSpacing.pad,
+                  right: AppSpacing.pad,
+                  top: AppSpacing.sectionY * 0.5,
+                  // With `extendBody` on the shell, this is the nav bar's
+                  // height.
+                  bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.section,
+                  children: <Widget>[
+                    _WizardHeader(state: state),
+                    switch (state.step) {
+                      BookingStep.establishment => _EstablishmentStep(
+                        state: state,
+                      ),
+                      BookingStep.serviceAndDoctor => _ServiceAndDoctorStep(
+                        state: state,
+                      ),
+                      BookingStep.schedule => _ScheduleStep(state: state),
+                      BookingStep.confirmed => _ConfirmedStep(state: state),
+                    },
+                  ],
+                ),
+              ),
+            ),
           ),
-          child: BlocConsumer<BookingBloc, BookingState>(
-            listenWhen: (BookingState previous, BookingState current) =>
-                current.isSessionExpired && !previous.isSessionExpired,
-            listener: (BuildContext context, BookingState state) {
-              context.read<AuthBloc>().add(const AuthSessionExpired());
-            },
-            builder: (BuildContext context, BookingState state) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: AppSpacing.section,
-                children: <Widget>[
-                  _WizardHeader(state: state),
-                  switch (state.step) {
-                    BookingStep.establishment => _EstablishmentStep(
-                      state: state,
-                    ),
-                    BookingStep.serviceAndDoctor => _ServiceAndDoctorStep(
-                      state: state,
-                    ),
-                    BookingStep.schedule => _ScheduleStep(state: state),
-                    BookingStep.confirmed => _ConfirmedStep(state: state),
-                  },
-                ],
-              );
-            },
-          ),
-        ),
-      ),
+        );
+      },
+    );
+  }
+}
+
+/// Makes the device's back button walk the wizard BACKWARDS instead of
+/// leaving it.
+///
+/// ## The bug this fixes
+///
+/// "Agendar" is the root of its own shell branch, so its navigator has
+/// exactly one route and nothing to pop. `go_router` asks the active branch
+/// first (`GoRouterDelegate._findCurrentNavigators`), gets "I cannot pop",
+/// falls through to the root — which also has one route — and the gesture
+/// reaches the platform, which backgrounds the app. From step 3 that means a
+/// patient who had already chosen a sede, a service, a doctor and a slot lost
+/// all four to the gesture they use most.
+///
+/// ## Why no "vas a perder el progreso" dialog
+///
+/// Because with this in place there is no progress to lose. A confirmation
+/// dialog is the right tool when the action is irreversible and the user
+/// cannot see what it costs — that is why cancelling a turn has one. Back
+/// here is neither: it moves one step, the move is visible, and the step is
+/// one tap away again. A dialog on every back would put a modal in front of
+/// the most-used gesture on the phone to protect against something that no
+/// longer happens.
+///
+/// ## What each step does
+///
+/// | step                | back                                            |
+/// |---------------------|-------------------------------------------------|
+/// | 1 Sede              | leaves — nothing chosen, nothing to protect      |
+/// | 2 Servicio y doctor | step 1                                          |
+/// | 3 Horario           | step 2                                          |
+/// | 3 Horario, booking  | nothing: the request may already have landed     |
+/// | 4 Confirmado        | starts a fresh booking, like "Agendar otro turno"|
+///
+/// Step 4 is the one that is not obvious. The turn is already booked and the
+/// ticket is on screen, so there is no step behind it to return to — but
+/// dropping the patient out of the app one gesture after they booked reads as
+/// a crash, and it is the moment they are least sure the booking worked.
+/// Resetting is exactly what the button under the ticket already does, and it
+/// leaves the branch on step 1 instead of parked on a stale ticket. A second
+/// back from there leaves normally.
+class _BookingBackGuard extends StatelessWidget {
+  const _BookingBackGuard({required this.state, required this.child});
+
+  final BookingState state;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // Blocked outright while the booking request is in flight — the same rule
+    // `ResetPasswordScreen` applies to a password already being written. The
+    // server may have created the turn; unwinding the wizard underneath that
+    // would leave the patient with a turn and no ticket.
+    final bool booking = state.status == BookingStatus.booking;
+    final BookingStep? previous = state.previousStep;
+    final bool handled =
+        booking || previous != null || state.step == BookingStep.confirmed;
+
+    return PopScope(
+      // `false` makes the route report `doNotPop`, which is what turns the
+      // gesture into a callback instead of an exit. `true` lets it bubble the
+      // way it always did — which on step 1 is correct.
+      canPop: !handled,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop || booking) return;
+
+        final BookingBloc bloc = context.read<BookingBloc>();
+        if (previous != null) {
+          bloc.add(BookingStepBackRequested(previous));
+          return;
+        }
+        bloc.add(const BookingReset());
+      },
+      child: child,
     );
   }
 }
@@ -102,6 +194,10 @@ class _BookingView extends StatelessWidget {
 /// The kicker + title every step opens with, plus a "Volver" back into the
 /// previous one — absent on step 1 (nothing behind it) and step 4 (the only
 /// way out of a ticket is "Agendar otro turno", not a step back).
+///
+/// The target comes from [BookingState.previousStep] rather than from a table
+/// of its own, so this link and the device's back button can never drift into
+/// disagreeing about what "back" means — see [_BookingBackGuard].
 class _WizardHeader extends StatelessWidget {
   const _WizardHeader({required this.state});
 
@@ -114,16 +210,9 @@ class _WizardHeader extends StatelessWidget {
     BookingStep.confirmed: 'Turno confirmado',
   };
 
-  BookingStep? get _backTarget => switch (state.step) {
-    BookingStep.establishment => null,
-    BookingStep.serviceAndDoctor => BookingStep.establishment,
-    BookingStep.schedule => BookingStep.serviceAndDoctor,
-    BookingStep.confirmed => null,
-  };
-
   @override
   Widget build(BuildContext context) {
-    final BookingStep? back = _backTarget;
+    final BookingStep? back = state.previousStep;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

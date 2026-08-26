@@ -41,6 +41,7 @@ import '../../features/home/presentation/blocs/appointments/appointments_bloc.da
 import '../../features/home/presentation/blocs/booking/booking_bloc.dart';
 import '../../features/home/presentation/blocs/coverage/coverage_bloc.dart';
 import '../../features/home/presentation/blocs/history/history_bloc.dart';
+import '../../features/home/presentation/blocs/password/password_bloc.dart';
 import '../../features/home/presentation/blocs/profile/profile_bloc.dart';
 import '../network/dio_client.dart';
 import '../network/token_store.dart';
@@ -210,6 +211,9 @@ Future<void> configureDependencies() async {
   // ==========================================================
   sl.registerLazySingleton(() => GetMyProfile(sl()));
   sl.registerLazySingleton(() => UpdateMyContact(sl()));
+  // `ChangeMyPassword`, not `ChangePassword` — the recovery flow already owns
+  // that name and this file imports both. See the use case's own doc.
+  sl.registerLazySingleton(() => ChangeMyPassword(sl()));
   sl.registerLazySingleton(() => GetMyAppointments(sl()));
   sl.registerLazySingleton(() => CancelAppointment(sl()));
   sl.registerLazySingleton(() => WatchTurnUpdates(sl()));
@@ -277,5 +281,13 @@ Future<void> configureDependencies() async {
   // fetch for a singleton to share — unlike `ProfileBloc`.
   sl.registerFactory<CoverageBloc>(
     () => CoverageBloc(getMyCoverages: sl()),
+  );
+
+  // A FACTORY even though `ProfileBloc` next to it is a singleton, and the
+  // difference is the point: this one holds a SUBMISSION, not a record. A
+  // rejected password left in a shared singleton would still be on screen
+  // under "Mi informacion" the next time the patient opened it.
+  sl.registerFactory<PasswordBloc>(
+    () => PasswordBloc(changeMyPassword: sl()),
   );
 }

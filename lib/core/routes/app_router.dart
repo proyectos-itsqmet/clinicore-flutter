@@ -13,8 +13,11 @@ import '../../features/auth/presentation/screens/register_profile_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
+import '../../features/home/domain/entities/history_entry.dart';
 import '../../features/home/presentation/screens/appointments_screen.dart';
 import '../../features/home/presentation/screens/booking_screen.dart';
+import '../../features/home/presentation/screens/change_password_screen.dart';
+import '../../features/home/presentation/screens/history_detail_screen.dart';
 import '../../features/home/presentation/screens/history_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/home/presentation/screens/personal_info_screen.dart';
@@ -159,6 +162,26 @@ class AppRouter {
         path: AppPath.personalInfoScreen,
         name: PathName.personalInfoScreen,
         builder: (context, state) => const PersonalInfoScreen(),
+      ),
+
+      GoRoute(
+        path: AppPath.changePasswordScreen,
+        name: PathName.changePasswordScreen,
+        builder: (context, state) => const ChangePasswordScreen(),
+      ),
+
+      // The visit travels in `extra` rather than in the path: it is an object
+      // this app JOINED from three endpoints, not a resource with an id, and
+      // re-fetching it here would put a second audited clinical read into the
+      // server's log for a card the patient already loaded. `extra` is
+      // in-memory only, so a cold start on this URL arrives with null — see
+      // `HistoryDetailScreen`, which renders that as what it is instead of
+      // casting and crashing.
+      GoRoute(
+        path: AppPath.historyDetailScreen,
+        name: PathName.historyDetailScreen,
+        builder: (context, state) =>
+            HistoryDetailScreen(entry: state.extra as HistoryEntry?),
       ),
 
       StatefulShellRoute.indexedStack(

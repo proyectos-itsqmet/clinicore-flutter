@@ -40,6 +40,13 @@ import '../widgets/appointment_card.dart';
 /// out. But telling a patient "no tienes citas agendadas" when the REQUEST
 /// failed is the single most damaging thing this screen can say, so a failure
 /// gets its own branch with a retry.
+///
+/// ## Pull-to-refresh reloads the OPEN tab, not both
+///
+/// The gesture belongs to the list under the finger. Reloading the tab the
+/// patient is not looking at would spend a request — one per status, see
+/// `AppointmentsRemoteDataSource` — on a list nobody asked to see, and it
+/// would do it while a "Pasadas" bloc may not even exist yet.
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
 
@@ -77,6 +84,22 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     });
   }
 
+  /// Drives the pull-to-refresh gesture: fires a reload on [bloc] and waits
+  /// for it to settle, so the spinner stays up for exactly as long as the
+  /// request does. Returning immediately would snap it away before the new
+  /// list arrived, which reads as "nothing happened".
+  ///
+  /// The bloc is passed in rather than read from the context because this
+  /// screen OWNS both of them — see the class doc for why only the open one
+  /// reloads.
+  Future<void> _refresh(AppointmentsBloc bloc) {
+    final Future<AppointmentsState> settled = bloc.stream.firstWhere(
+      (AppointmentsState state) => state.status != AppointmentsStatus.loading,
+    );
+    bloc.add(const AppointmentsRequested());
+    return settled;
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool upcomingTab = _filter == 0;
@@ -87,32 +110,45 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
     return SafeArea(
       bottom: false,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          left: AppSpacing.pad,
-          right: AppSpacing.pad,
-          top: AppSpacing.sectionY * 0.5,
-          bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: AppSpacing.section,
-          children: <Widget>[
-            const AppSectionHeading(kicker: 'Tus turnos', title: 'Mis citas.'),
+      child: RefreshIndicator(
+        onRefresh: () => _refresh(bloc),
+        child: SingleChildScrollView(
+          // Without this the gesture is dead whenever the content is shorter
+          // than the viewport — which is exactly the empty and error states,
+          // the two where a patient most wants to pull again.
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.only(
+            left: AppSpacing.pad,
+            right: AppSpacing.pad,
+            top: AppSpacing.sectionY * 0.5,
+            bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.section,
+            children: <Widget>[
+              const AppSectionHeading(
+                kicker: 'Tus turnos',
+                title: 'Mis citas.',
+              ),
 
-            AppSegmented(
-              options: _filters,
-              selectedIndex: _filter,
-              onChanged: _select,
-            ),
+              AppSegmented(
+                options: _filters,
+                selectedIndex: _filter,
+                onChanged: _select,
+              ),
 
-            BlocProvider<AppointmentsBloc>.value(
-              value: bloc,
-              // Keyed by scope so switching tabs rebuilds the subtree instead
-              // of animating one list's state into the other's.
-              child: AppointmentsList(key: ValueKey<AppointmentScope>(scope), scope: scope),
-            ),
-          ],
+              BlocProvider<AppointmentsBloc>.value(
+                value: bloc,
+                // Keyed by scope so switching tabs rebuilds the subtree
+                // instead of animating one list's state into the other's.
+                child: AppointmentsList(
+                  key: ValueKey<AppointmentScope>(scope),
+                  scope: scope,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -147,7 +183,8 @@ class AppointmentsList extends StatelessWidget {
       builder: (BuildContext context, AppointmentsState state) {
         if (state.isFirstLoad) return const _AppointmentsSkeleton();
 
-        if (state.status == AppointmentsStatus.failure) {
+        if (state.status == AppointmentsStatus.failure &&
+            !state.isReloadFailure) {
           return _LoadFailure(
             message: state.failure?.message ?? 'No pudimos cargar tus citas.',
             onRetry: () => context.read<AppointmentsBloc>().add(
@@ -181,6 +218,16 @@ class AppointmentsList extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: AppSpacing.section,
           children: <Widget>[
+            // A pull-to-refresh that failed with a list already on screen —
+            // see `AppointmentsState.isReloadFailure`. The list stays up;
+            // this line is the only thing that changes.
+            if (state.isReloadFailure)
+              Text(
+                state.failure?.message ??
+                    'No pudimos actualizar tus citas.',
+                style: AppTypography.cap.copyWith(color: AppColors.emergency),
+              ),
+
             for (final Appointment item in state.items)
               _AppointmentTile(
                 appointment: item,

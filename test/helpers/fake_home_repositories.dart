@@ -44,8 +44,18 @@ class FakePatientRepository implements PatientRepository {
   Either<Failure, PatientProfile> profileResult = Right(testProfile);
   Either<Failure, PatientProfile> updateResult = Right(testProfile);
 
+  /// What changing the password answers. Defaults to success so a test only
+  /// scripts it when the failure IS the subject.
+  Either<Failure, Unit> passwordResult = const Right<Failure, Unit>(unit);
+
   /// What the contact sheet actually submitted.
   PatientContactUpdate? lastUpdate;
+
+  /// The two values "Cambiar contrasena" actually sent, in order. Recorded as
+  /// a pair because the server compares them itself, so a test has to be able
+  /// to prove BOTH left the screen — sending the same string twice would hide
+  /// a form that quietly ignored its confirm field.
+  ({String password, String repeated})? lastPasswordChange;
 
   @override
   Future<Either<Failure, PatientProfile>> getMyProfile() async => profileResult;
@@ -56,6 +66,15 @@ class FakePatientRepository implements PatientRepository {
   ) async {
     lastUpdate = update;
     return updateResult;
+  }
+
+  @override
+  Future<Either<Failure, Unit>> changeMyPassword({
+    required String password,
+    required String repeatedPassword,
+  }) async {
+    lastPasswordChange = (password: password, repeated: repeatedPassword);
+    return passwordResult;
   }
 }
 

@@ -188,6 +188,33 @@ abstract final class ApiEndpoints {
   /// 200 body: the updated `PatientDTO`.
   static const String patientMeUpdate = '$_patients/me';
 
+  /// `PUT /api/patients/change-password` — the signed-in patient sets a new
+  /// password from inside the app.
+  ///
+  /// Body: `{ "password": String, "repeatedPassword": String }` —
+  /// `ChangePasswordBody`, the SAME type [recoverPasswordChange] takes. The
+  /// server compares the two itself and answers 400 "Las contraseñas no
+  /// coinciden", so the form's own confirm check is a courtesy, not the
+  /// guarantee.
+  ///
+  /// 200 body: `{ "Message": "Contraseña actualizada exitosamente" }` —
+  /// capital `M`, like the registration replies.
+  ///
+  /// **It does NOT ask for the current password, and that is a server gap,
+  /// not a client shortcut.** `PatientController.changeMyPassword` resolves
+  /// the patient from `auth.getName()` and calls
+  /// `PatientService.updatePassword` with the new value; nothing verifies
+  /// that whoever holds the token knows the old one. So a stolen or borrowed
+  /// session can lock the real patient out. Closing it means adding a
+  /// `currentPassword` field to `ChangePasswordBody` and a
+  /// `passwordEncoder.matches` check server-side — until then this app cannot
+  /// ask for it, because sending a field the server ignores would tell the
+  /// patient they are protected when they are not.
+  ///
+  /// Authenticates with the 24h LOGIN token, like every other `/api/patients`
+  /// route — see `PatientRemoteDataSource`.
+  static const String patientChangePassword = '$_patients/change-password';
+
   // ==========================================================
   // TURNS — the patient's appointments
   // ==========================================================
