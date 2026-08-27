@@ -46,14 +46,21 @@ class BookingServiceAndDoctorSelected extends BookingEvent {
   List<Object?> get props => <Object?>[service, doctor];
 }
 
-/// The date filter on step 3 changed. `null` means "todos los dias" — the
-/// web flow's cleared filter. "Hoy" / "Manana" are resolved to a concrete
-/// [DateTime] by the SCREEN before dispatching this, so the bloc never calls
-/// `DateTime.now()` itself and stays trivially testable.
+/// The day step 3 is asking about changed.
+///
+/// [date] is NON-nullable, and that is the rule rather than a detail. It used
+/// to accept null as "todos los dias", which sent no `date` parameter at all
+/// and let the server answer with every free slot across every future day —
+/// the wall of chips this step became. Step 3 asks about exactly one day, so
+/// there is no null to represent.
+///
+/// The day is always local midnight, resolved by whoever dispatches this:
+/// the "Hoy" / "Manana" chips and the date picker in `_DateFilterBar`, and
+/// [BookingBloc] itself when step 3 opens.
 class BookingDateFilterChanged extends BookingEvent {
   const BookingDateFilterChanged(this.date);
 
-  final DateTime? date;
+  final DateTime date;
 
   @override
   List<Object?> get props => <Object?>[date];

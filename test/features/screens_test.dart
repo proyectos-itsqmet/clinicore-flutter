@@ -18,7 +18,6 @@ import 'package:clinicore_flutter/features/home/presentation/screens/change_pass
 import 'package:clinicore_flutter/features/home/presentation/screens/history_detail_screen.dart';
 import 'package:clinicore_flutter/features/home/presentation/screens/history_screen.dart';
 import 'package:clinicore_flutter/features/home/presentation/screens/personal_info_screen.dart';
-import 'package:clinicore_flutter/shared/helpers/date_labels.dart';
 import 'package:clinicore_flutter/shared/ui/atoms/atoms.dart';
 import 'package:clinicore_flutter/shared/ui/organisms/organisms.dart';
 import 'package:dartz/dartz.dart';
@@ -69,9 +68,14 @@ void main() {
     // real, because "did the screen wire them up" is what these tests check.
     setUp(() => fakes = setUpHomeDependencies());
 
-    /// testSlots[1] (10:00) has no date filter applied by default, so its
-    /// chip carries its own date — see `_ScheduleStep`'s label rule.
-    String slot10amLabel() => '${shortDate(testDay)} 10:00';
+    /// testSlots[1], as its chip is labelled: the HOUR alone.
+    ///
+    /// The chip used to read `12 nov 10:00`. It carried its own date only
+    /// because the "Todos" filter could put several days in one list — with
+    /// step 3 always showing exactly one day, and that day named by the chip
+    /// bar right above the grid, the date on every chip was the same string
+    /// repeated once per slot.
+    String slot10amLabel() => '10:00';
 
     /// Walks the wizard from a fresh screen to step 3, having picked
     /// `Sede Norte` -> `testConsultationService` + `Ana Torres`.
@@ -191,7 +195,13 @@ void main() {
       ) async {
         await goToScheduleStep(tester);
         await _tapLabel(tester, slot10amLabel());
+        // Two frames, not one, and the second carries the morph duration:
+        // choosing a slot is what reveals the pinned confirm bar, and the
+        // bloc emits on the microtask AFTER the tap — so the first pump is
+        // the rebuild that starts the reveal and the second is the reveal
+        // itself. Tapping in between hits a bar that is still growing.
         await tester.pump();
+        await tester.pump(AppMotion.morph);
         await _tapLabel(tester, 'Confirmar turno', settle: AppMotion.press);
         await tester.pump(const Duration(milliseconds: 600));
         expect(find.text('PASO 4 DE 4'), findsOneWidget);
@@ -251,7 +261,13 @@ void main() {
         await goToScheduleStep(tester);
 
         await _tapLabel(tester, slot10amLabel());
+        // Two frames, not one, and the second carries the morph duration:
+        // choosing a slot is what reveals the pinned confirm bar, and the
+        // bloc emits on the microtask AFTER the tap — so the first pump is
+        // the rebuild that starts the reveal and the second is the reveal
+        // itself. Tapping in between hits a bar that is still growing.
         await tester.pump();
+        await tester.pump(AppMotion.morph);
         await _tapLabel(tester, 'Confirmar turno', settle: AppMotion.press);
         // Drains `AppTick`'s draw timer. A bare `pump()` leaves it pending
         // and the test fails on a timer rather than on the assertion — the
@@ -277,7 +293,13 @@ void main() {
 
         await goToScheduleStep(tester);
         await _tapLabel(tester, slot10amLabel());
+        // Two frames, not one, and the second carries the morph duration:
+        // choosing a slot is what reveals the pinned confirm bar, and the
+        // bloc emits on the microtask AFTER the tap — so the first pump is
+        // the rebuild that starts the reveal and the second is the reveal
+        // itself. Tapping in between hits a bar that is still growing.
         await tester.pump();
+        await tester.pump(AppMotion.morph);
         await _tapLabel(tester, 'Confirmar turno', settle: AppMotion.press);
         await tester.pump();
 

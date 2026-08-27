@@ -86,6 +86,39 @@ class BookingSlot extends Equatable {
 
   final bool isFree;
 
+  /// The concrete instant this slot begins.
+  ///
+  /// [date] is LOCAL midnight (see `readDate`) and [time] is `HH:mm`, so
+  /// neither field can answer "has this already passed?" alone — a slot at
+  /// 09:00 yesterday is past at 08:00 today, and comparing the hours would say
+  /// the opposite.
+  ///
+  /// ## When the hour cannot be read
+  ///
+  /// `readTime` returns the raw string untouched for anything it does not
+  /// recognise as `HH:mm`, so [time] is not guaranteed parseable. This falls
+  /// back to the END of the day rather than to midnight, because the honest
+  /// reading of an unparseable hour is "we know the day, not the moment" —
+  /// midnight would hide every slot of today, and the clinic would lose a
+  /// day's bookable inventory to a formatting change on the wire.
+  DateTime get startsAt {
+    final List<String> parts = time.split(':');
+    final int? hour = parts.isEmpty ? null : int.tryParse(parts[0]);
+    final int? minute = parts.length < 2 ? null : int.tryParse(parts[1]);
+    if (hour == null || minute == null) {
+      return DateTime(date.year, date.month, date.day, 23, 59);
+    }
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
+  /// Whether this slot can still be booked at [now].
+  ///
+  /// STRICTLY after: a slot starting this very minute is not offered. That is
+  /// the same cut `TurnService.requireUpcoming` makes on the server, and the
+  /// two agreeing is what keeps the grid from drawing a chip the server would
+  /// then refuse.
+  bool isUpcomingAt(DateTime now) => startsAt.isAfter(now);
+
   @override
   List<Object?> get props => <Object?>[scheduleId, date, time, isFree];
 }

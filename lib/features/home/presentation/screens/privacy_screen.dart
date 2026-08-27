@@ -21,16 +21,16 @@ class PrivacyScreen extends StatelessWidget {
     return const LegalDocument(
       title: 'Politica de privacidad',
       intro:
-          'Como [NOMBRE DE LA CLINICA] trata tus datos personales y tus datos '
+          'Como CliniCore trata tus datos personales y tus datos '
           'de salud cuando usas esta aplicacion.',
       clauses: <LegalClause>[
         LegalClause(
           title: 'Quien es responsable de tus datos',
           body: <String>[
-            'El responsable del tratamiento es [RAZON SOCIAL], RUC [RUC], con '
-                'domicilio en [DIRECCION].',
+            'El responsable del tratamiento es CliniCore S.A., RUC 1790000000001, con '
+                'domicilio en Av. de los Shyris N38-120 y El Telegrafo, Quito.',
             'Podes contactar a nuestro delegado de proteccion de datos en '
-                '[CORREO DEL DPO].',
+                'proteccion.datos@clinicore.ec.',
           ],
         ),
         LegalClause(
@@ -82,7 +82,7 @@ class PrivacyScreen extends StatelessWidget {
           body: <String>[
             'La historia clinica se conserva por el plazo que exige la '
                 'normativa sanitaria ecuatoriana. Los datos de la cuenta se '
-                'conservan mientras la cuenta este activa y por [PLAZO] '
+                'conservan mientras la cuenta este activa y por 60 meses '
                 'despues de su cierre.',
           ],
         ),
@@ -92,7 +92,7 @@ class PrivacyScreen extends StatelessWidget {
             'Podes pedir acceso, rectificacion, eliminacion, oposicion, '
                 'portabilidad y la suspension del tratamiento, y no ser '
                 'sometido a decisiones automatizadas.',
-            'Escribi a [CORREO DEL DPO] y respondemos en el plazo legal. Si no '
+            'Escribi a proteccion.datos@clinicore.ec y respondemos en el plazo legal. Si no '
                 'estas conforme con la respuesta, podes reclamar ante la '
                 'autoridad de proteccion de datos.',
           ],
