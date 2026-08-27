@@ -165,6 +165,20 @@ class _LoginViewState extends State<_LoginView> {
                         const LoginBiometricRequested(),
                       ),
               ),
+
+            // El asistente, ANTES de iniciar sesion y a proposito: quien
+            // todavia no tiene cuenta necesita preguntar que servicios hay,
+            // cuanto cuestan y si queda cerca ANTES de decidir registrarse.
+            // Es publico y anonimo, asi que no requiere sesion.
+            AppButton(
+              label: 'Consultar al asistente',
+              variant: AppButtonVariant.ghost,
+              fullWidth: true,
+              leading: const Icon(AppIcons.assistant),
+              onPressed: state.isSubmitting
+                  ? null
+                  : () => context.push(AppPath.assistantScreen),
+            ),
           ],
         );
       },
