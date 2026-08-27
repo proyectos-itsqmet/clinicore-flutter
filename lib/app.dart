@@ -2,6 +2,7 @@ import 'package:clinicore_flutter/core/di/injection.dart';
 import 'package:clinicore_flutter/core/routes/app_router.dart';
 import 'package:clinicore_flutter/core/theme/theme.dart';
 import 'package:clinicore_flutter/features/auth/presentation/blocs/auth/auth_bloc.dart';
+import 'package:clinicore_flutter/features/home/presentation/blocs/profile/profile_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -48,36 +49,43 @@ class _MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return BlocProvider<AuthBloc>.value(
       value: _authBloc,
-      child: MaterialApp.router(
-        title: 'CliniCore',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        // No dark theme, and none inherited from the OS. The palette board
-        // defines one set of surfaces with contrast ratios measured against
-        // them; a dark variant needs its own measured palette, not an inverted
-        // copy. Until that exists, honouring a system dark preference would
-        // mean shipping unmeasured colour.
-        themeMode: ThemeMode.light,
-
-        // Spanish, and not "whatever the phone is set to". A patient with an
-        // English phone still gets a Spanish clinic app, and without these
-        // delegates the date picker, the text-selection menu and every native
-        // tooltip come out in English inside it.
-        locale: const Locale('es'),
-        supportedLocales: const <Locale>[Locale('es')],
-        localizationsDelegates: const <LocalizationsDelegate<Object>>[
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-
-        routerConfig: _appRouter.router,
-        builder: (context, child) {
-          return MediaQuery.withClampedTextScaling(
-            maxScaleFactor: MainApp._maxTextScale,
-            child: child!,
-          );
+      child: BlocListener<AuthBloc, AuthState>(
+        listenWhen: (previous, current) =>
+            previous.isAuthenticated && !current.isAuthenticated,
+        listener: (context, state) {
+          sl<ProfileBloc>().add(const ProfileReset());
         },
+        child: MaterialApp.router(
+          title: 'CliniCore',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          // No dark theme, and none inherited from the OS. The palette board
+          // defines one set of surfaces with contrast ratios measured against
+          // them; a dark variant needs its own measured palette, not an inverted
+          // copy. Until that exists, honouring a system dark preference would
+          // mean shipping unmeasured colour.
+          themeMode: ThemeMode.light,
+
+          // Spanish, and not "whatever the phone is set to". A patient with an
+          // English phone still gets a Spanish clinic app, and without these
+          // delegates the date picker, the text-selection menu and every native
+          // tooltip come out in English inside it.
+          locale: const Locale('es'),
+          supportedLocales: const <Locale>[Locale('es')],
+          localizationsDelegates: const <LocalizationsDelegate<Object>>[
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+
+          routerConfig: _appRouter.router,
+          builder: (context, child) {
+            return MediaQuery.withClampedTextScaling(
+              maxScaleFactor: MainApp._maxTextScale,
+              child: child!,
+            );
+          },
+        ),
       ),
     );
   }

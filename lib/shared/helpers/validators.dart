@@ -42,18 +42,18 @@ abstract final class Validators {
   ///   multiple of ten.
   static String? cedula(String? value) {
     final String v = (value ?? '').trim();
-    if (v.isEmpty) return 'Ingresa tu cedula';
+    if (v.isEmpty) return 'Ingresa tu cédula';
     if (v.length != 10 || !RegExp(r'^\d{10}$').hasMatch(v)) {
-      return 'La cedula tiene 10 digitos';
+      return 'La cédula tiene 10 dígitos';
     }
 
     final List<int> d = v.split('').map(int.parse).toList();
 
     final int province = d[0] * 10 + d[1];
     if ((province < 1 || province > 24) && province != 30) {
-      return 'Esa cedula no corresponde a ninguna provincia';
+      return 'Esa cédula no corresponde a ninguna provincia';
     }
-    if (d[2] >= 6) return 'Revisa la cedula, el tercer digito no es valido';
+    if (d[2] >= 6) return 'Revisa la cédula, el tercer dígito no es válido';
 
     int sum = 0;
     for (int i = 0; i < 9; i++) {
@@ -64,7 +64,7 @@ abstract final class Validators {
     }
     final int check = (10 - (sum % 10)) % 10;
 
-    if (check != d[9]) return 'Revisa la cedula, no verifica';
+    if (check != d[9]) return 'Revisa la cédula, no verifica';
     return null;
   }
 
@@ -73,7 +73,7 @@ abstract final class Validators {
     final String v = (value ?? '').replaceAll(RegExp(r'\s|-'), '');
     if (v.isEmpty) return 'Ingresa tu celular';
     if (!RegExp(r'^09\d{8}$').hasMatch(v)) {
-      return 'El celular va con 10 digitos, empezando en 09';
+      return 'El celular va con 10 dígitos, empezando en 09';
     }
     return null;
   }
@@ -85,20 +85,20 @@ abstract final class Validators {
   /// which is the thing that actually helps.
   static String? password(String? value) {
     final String v = value ?? '';
-    if (v.isEmpty) return 'Ingresa una contrasena';
+    if (v.isEmpty) return 'Ingresa una contraseña';
     if (v.length < 8) return 'Al menos 8 caracteres';
     if (!RegExp(r'[A-Za-zaeiouAEIOUnN]').hasMatch(v)) {
       return 'Agrega al menos una letra';
     }
-    if (!RegExp(r'\d').hasMatch(v)) return 'Agrega al menos un numero';
+    if (!RegExp(r'\d').hasMatch(v)) return 'Agrega al menos un número';
     return null;
   }
 
   /// The repeat field. Takes the original so the comparison happens here
   /// rather than in every screen.
   static String? confirmPassword(String? value, String original) {
-    if ((value ?? '').isEmpty) return 'Repite la contrasena';
-    if (value != original) return 'Las contrasenas no coinciden';
+    if ((value ?? '').isEmpty) return 'Repite la contraseña';
+    if (value != original) return 'Las contraseñas no coinciden';
     return null;
   }
 
@@ -118,9 +118,9 @@ abstract final class Validators {
   /// A 6-digit one-time code.
   static String? otp(String? value, {int length = 6}) {
     final String v = (value ?? '').trim();
-    if (v.isEmpty) return 'Ingresa el codigo';
+    if (v.isEmpty) return 'Ingresa el código';
     if (v.length != length || !RegExp(r'^\d+$').hasMatch(v)) {
-      return 'El codigo tiene $length digitos';
+      return 'El código tiene $length dígitos';
     }
     return null;
   }

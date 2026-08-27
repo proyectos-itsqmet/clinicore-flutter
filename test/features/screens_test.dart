@@ -708,8 +708,8 @@ void main() {
       await tester.tap(find.text('Ingresar'));
       await tester.pump(AppMotion.press);
 
-      expect(find.text('Ingresa tu correo o cedula'), findsOneWidget);
-      expect(find.text('Ingresa una contrasena'), findsOneWidget);
+      expect(find.text('Ingresa tu correo o cédula'), findsOneWidget);
+      expect(find.text('Ingresa una contraseña'), findsOneWidget);
     });
 
     testWidgets('the identity field routes to the right validator', (
@@ -770,7 +770,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('Correo, cedula o contrasena incorrectos.'),
+        find.text('Correo, cedula o contraseña incorrectos.'),
         findsOneWidget,
       );
     });
@@ -805,11 +805,11 @@ void main() {
       await pumpApp(tester, const ProfileScreen());
       await tester.pump();
 
-      expect(find.text('Mi informacion'), findsOneWidget);
-      expect(find.text('Cambiar contrasena'), findsOneWidget);
-      expect(find.text('Terminos y condiciones'), findsOneWidget);
-      expect(find.text('Politica de privacidad'), findsOneWidget);
-      expect(find.text('Cerrar sesion'), findsOneWidget);
+      expect(find.text('Mi información'), findsOneWidget);
+      expect(find.text('Cambiar contraseña'), findsOneWidget);
+      expect(find.text('Términos y condiciones'), findsOneWidget);
+      expect(find.text('Política de privacidad'), findsOneWidget);
+      expect(find.text('Cerrar sesión'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -821,7 +821,7 @@ void main() {
       // returned, not from a placeholder string.
       expect(find.text('AP'), findsOneWidget);
       expect(find.text('Ana Perez'), findsOneWidget);
-      expect(find.text('Cedula 1712345678'), findsOneWidget);
+      expect(find.text('Cédula 1712345678'), findsOneWidget);
     });
 
     testWidgets('a failed profile load still leaves the way out reachable', (
@@ -837,8 +837,8 @@ void main() {
       await pumpApp(tester, const ProfileScreen());
       await tester.pump();
 
-      expect(find.text('Cerrar sesion'), findsOneWidget);
-      expect(find.text('Mi informacion'), findsOneWidget);
+      expect(find.text('Cerrar sesión'), findsOneWidget);
+      expect(find.text('Mi información'), findsOneWidget);
     });
   });
 
@@ -872,7 +872,7 @@ void main() {
 
         // The one clinical line the list carries: it is what a patient scans
         // for when looking for a specific visit.
-        expect(find.text('Migrana tensional'), findsOneWidget);
+        expect(find.text('Migraña tensional'), findsOneWidget);
 
         // Two medications across the fixture's single prescription, counted
         // rather than listed — the count is what tells the patient there is a
@@ -903,11 +903,11 @@ void main() {
         // Doctor and date render joined in one Text ("03 may / Luis Mora"),
         // same as `AppointmentsScreen`'s card — see `_EntryCard`.
         expect(find.textContaining('Luis Mora'), findsOneWidget);
-        expect(find.text('Migrana tensional'), findsOneWidget);
+        expect(find.text('Migraña tensional'), findsOneWidget);
 
         // The undocumented visit says so on its own card rather than looking
         // identical to a documented one with a short diagnosis.
-        expect(find.text('Sin resumen clinico'), findsOneWidget);
+        expect(find.text('Sin resumen clínico'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -918,7 +918,7 @@ void main() {
       await pumpApp(tester, const HistoryScreen());
       await tester.pump();
 
-      expect(find.text('Tu historial esta vacio'), findsOneWidget);
+      expect(find.text('Tu historial esta vacío'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -932,7 +932,7 @@ void main() {
         await tester.pump();
 
         expect(
-          find.text('Sin conexion. Revisa tu internet e intenta de nuevo.'),
+          find.text('Sin conexión. Revisa tu internet e intenta de nuevo.'),
           findsOneWidget,
         );
         expect(find.text('Reintentar'), findsOneWidget);
@@ -958,7 +958,7 @@ void main() {
         expect(find.text('Activa'), findsOneWidget);
         expect(find.text('Vencida'), findsOneWidget);
         expect(find.text('Seguros Equinoccial'), findsOneWidget);
-        expect(find.text('IESS - Plan Basico'), findsOneWidget);
+        expect(find.text('IESS - Plan Básico'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -970,7 +970,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.textContaining('Todavia no tenes una cobertura'),
+        find.textContaining('Todavía no tienes una cobertura'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -987,7 +987,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('Sin conexion. Revisa tu internet e intenta de nuevo.'),
+        find.text('Sin conexión. Revisa tu internet e intenta de nuevo.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -1070,7 +1070,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Dolor de cabeza persistente'), findsOneWidget);
-      expect(find.text('Migrana tensional'), findsOneWidget);
+      expect(find.text('Migraña tensional'), findsOneWidget);
       // The encounter's doctor wins over the turn's — it is who actually
       // wrote the record.
       expect(find.text('Ana Torres'), findsWidgets);
@@ -1099,7 +1099,7 @@ void main() {
       await tester.pump();
 
       expect(
-        find.textContaining('todavia no tiene resumen clinico'),
+        find.textContaining('todavía no tiene resumen clínico'),
         findsOneWidget,
       );
       // The visit's own facts still render — that is the point of opening it.
@@ -1134,7 +1134,7 @@ void main() {
       await tester.enterText(find.byType(TextFormField).at(0), password);
       await tester.enterText(find.byType(TextFormField).at(1), confirm);
       await tester.pump();
-      await _tapLabel(tester, 'Guardar contrasena', settle: AppMotion.press);
+      await _tapLabel(tester, 'Guardar contraseña', settle: AppMotion.press);
       await tester.pump();
     }
 
@@ -1159,7 +1159,7 @@ void main() {
       // The server would answer 400 for this, but making the patient wait for
       // a round trip to learn they mistyped is the wrong shape of feedback.
       expect(fakes.patient.lastPasswordChange, isNull);
-      expect(find.text('Las contrasenas no coinciden'), findsOneWidget);
+      expect(find.text('Las contraseñas no coinciden'), findsOneWidget);
     });
 
     testWidgets('a password below the rules never reaches the network', (
@@ -1178,7 +1178,7 @@ void main() {
       tester,
     ) async {
       fakes.patient.passwordResult = const Left<Failure, Unit>(
-        ValidationFailure(message: 'La contrasena ya fue usada'),
+        ValidationFailure(message: 'La contraseña ya fue usada'),
       );
 
       await pumpApp(tester, const ChangePasswordScreen());
@@ -1188,11 +1188,11 @@ void main() {
 
       // Next to the fields it belongs to, not as a snackbar that slides away
       // before it is read.
-      expect(find.text('La contrasena ya fue usada'), findsOneWidget);
+      expect(find.text('La contraseña ya fue usada'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('there is no "contrasena actual" field to fake safety with', (
+    testWidgets('there is no "contraseña actual" field to fake safety with', (
       tester,
     ) async {
       await pumpApp(tester, const ChangePasswordScreen());

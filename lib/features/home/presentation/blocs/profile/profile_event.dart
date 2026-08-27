@@ -27,3 +27,11 @@ class ProfileContactSubmitted extends ProfileEvent {
   @override
   List<Object?> get props => <Object?>[update];
 }
+
+/// Clears the cached profile and resets the state back to [ProfileStatus.initial].
+///
+/// Fired on sign-out or session expiration so a subsequent login by another
+/// patient does not reuse stale data from the shared lazy singleton.
+class ProfileReset extends ProfileEvent {
+  const ProfileReset();
+}

@@ -719,7 +719,7 @@ class _DateFilterBar extends StatelessWidget {
         ),
         Expanded(
           child: AppChip(
-            label: isPickedDay ? shortDate(current!) : 'Otro dia',
+            label: isPickedDay ? shortDate(current!) : 'Otro día',
             selected: isPickedDay,
             onTap: () => _pickDay(context, bloc, today),
           ),

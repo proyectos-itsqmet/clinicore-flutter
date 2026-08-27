@@ -72,11 +72,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             kicker: 'Paso 1 de 3',
             title: 'Recuperemos tu acceso.',
             subtitle:
-                'Te enviamos un codigo de 6 digitos al correo con el que te '
+                'Te enviamos un código de 6 dígitos al correo con el que te '
                 'registraste.',
             onBack: () => context.pop(),
             footer: AuthFooterLink(
-              message: 'Ya la recordaste?',
+              message: '¿Ya la recordaste?',
               actionLabel: 'Volver al inicio',
               onTap: () => context.go(AppPath.loginScreen),
             ),
@@ -98,7 +98,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
 
               AppButton(
-                label: 'Enviar codigo',
+                label: 'Enviar código',
                 size: AppButtonSize.lg,
                 fullWidth: true,
                 isLoading: state.isSubmitting,
@@ -115,7 +115,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   const Icon(AppIcons.info, size: 16, color: AppColors.ink3),
                   Expanded(
                     child: Text(
-                      'El codigo vence en 5 minutos. Si no llega, revisa la '
+                      'El código vence en 5 minutos. Si no llega, revisa la '
                       'carpeta de correo no deseado.',
                       style: AppTypography.cap,
                     ),

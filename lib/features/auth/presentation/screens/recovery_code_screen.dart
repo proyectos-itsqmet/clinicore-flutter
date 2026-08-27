@@ -119,12 +119,12 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
 
         return AuthFormShell(
           kicker: 'Paso 2 de 3',
-          title: 'Escribe el codigo.',
+          title: 'Escribe el código.',
           subtitle: 'Lo enviamos a $target.',
           onBack: () => context.pop(),
           footer: AuthFooterLink(
-            message: 'Correo equivocado?',
-            actionLabel: 'Cambialo',
+            message: '¿Correo equivocado?',
+            actionLabel: 'Cámbialo',
             onTap: () => context.pop(),
           ),
           children: <Widget>[
@@ -132,7 +132,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: AppSpacing.lg,
               children: <Widget>[
-                const AppKicker(text: 'Codigo de 6 digitos', size: 11),
+                const AppKicker(text: 'Código de 6 dígitos', size: 11),
                 OtpField(controller: _code, onCompleted: (_) => _submit()),
                 if (_error != null)
                   Text(
@@ -159,7 +159,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                   ),
                   Expanded(
                     child: Text(
-                      'Despues de 3 intentos fallidos el codigo se bloquea y '
+                      'Despues de 3 intentos fallidos el código se bloquea y '
                       'hay que pedir uno nuevo.',
                       style: AppTypography.cap,
                     ),
@@ -168,7 +168,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
               ),
 
             AppButton(
-              label: 'Verificar codigo',
+              label: 'Verificar código',
               size: AppButtonSize.lg,
               fullWidth: true,
               isLoading: state.isSubmitting,
@@ -184,7 +184,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                       dense: true,
                     )
                   : AppButton(
-                      label: 'Reenviar codigo',
+                      label: 'Reenviar código',
                       variant: AppButtonVariant.ghost,
                       onPressed: state.isSubmitting ? null : _resend,
                     ),

@@ -78,26 +78,26 @@ class _ProfileView extends StatelessWidget {
             // then the two documents almost nobody re-reads.
             AppListRow(
               icon: AppIcons.personalInfo,
-              label: 'Mi informacion',
+              label: 'Mi información',
               supporting: 'Datos personales y de contacto',
               onTap: () => context.push(AppPath.personalInfoScreen),
             ),
             AppListRow(
               icon: AppIcons.password,
-              label: 'Cambiar contrasena',
-              supporting: 'Elegi una nueva para tu cuenta',
+              label: 'Cambiar contraseña',
+              supporting: 'Elige una nueva para tu cuenta',
               onTap: () => context.push(AppPath.changePasswordScreen),
             ),
             AppListRow(
               icon: AppIcons.terms,
-              label: 'Terminos y condiciones',
+              label: 'Términos y condiciones',
               supporting: 'Lo que aceptaste al crear la cuenta',
               onTap: () => context.push(AppPath.termsScreen),
             ),
             AppListRow(
               icon: AppIcons.privacy,
-              label: 'Politica de privacidad',
-              supporting: 'Como tratamos tus datos de salud',
+              label: 'Política de privacidad',
+              supporting: 'Cómo tratamos tus datos de salud',
               onTap: () => context.push(AppPath.privacyScreen),
             ),
 
@@ -106,14 +106,14 @@ class _ProfileView extends StatelessWidget {
 
             AppListRow(
               icon: AppIcons.signOut,
-              label: 'Cerrar sesion',
+              label: 'Cerrar sesión',
               danger: true,
               onTap: () => _confirmSignOut(context),
             ),
 
             Center(
               child: Text(
-                'CliniCore / version de desarrollo',
+                'CliniCore / versión de desarrollo',
                 style: AppTypography.cap,
               ),
             ),
@@ -130,7 +130,7 @@ class _ProfileView extends StatelessWidget {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Cerrar sesion?'),
+        title: const Text('¿Cerrar sesión?'),
         content: const Text(
           'Vas a tener que ingresar de nuevo para ver tus citas.',
         ),
@@ -145,7 +145,7 @@ class _ProfileView extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text(
-              'Cerrar sesion',
+              'Cerrar sesión',
               style: AppTypography.button.copyWith(color: AppColors.emergency),
             ),
           ),

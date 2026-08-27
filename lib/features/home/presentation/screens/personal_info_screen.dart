@@ -84,7 +84,7 @@ class _PersonalInfoView extends StatelessWidget {
 
           return AppScreen(
             topBar: AppTopBar(
-              title: 'Mi informacion',
+              title: 'Mi información',
               onBack: () => Navigator.of(context).pop(),
             ),
             // The button is only offered once there is something to edit.
@@ -114,11 +114,11 @@ class _PersonalInfoView extends StatelessWidget {
                     kicker: 'Identidad',
                     note:
                         'Estos datos no se pueden cambiar desde la app: tu '
-                        'historia clinica esta archivada con ellos. Si hay un '
-                        'error, avisanos en recepcion con tu cedula.',
+                        'historia clínica esta archivada con ellos. Si hay un '
+                        'error, avísanos en recepción con tu cédula.',
                     rows: <AppSummaryRow>[
                       AppSummaryRow(label: 'Nombre', value: profile.fullName),
-                      AppSummaryRow(label: 'Cedula', value: profile.cedula),
+                      AppSummaryRow(label: 'Cédula', value: profile.cedula),
                       AppSummaryRow(
                         label: 'Fecha de nacimiento',
                         value: profile.birthday == null
@@ -146,7 +146,7 @@ class _PersonalInfoView extends StatelessWidget {
                         value: profile.phone ?? _missing,
                       ),
                       AppSummaryRow(
-                        label: 'Direccion',
+                        label: 'Dirección',
                         value: profile.address ?? _missing,
                       ),
                       AppSummaryRow(
@@ -376,9 +376,9 @@ class _NoCoverage extends StatelessWidget {
               const Icon(AppIcons.info, size: 16, color: AppColors.ink3),
               Expanded(
                 child: Text(
-                  'Todavia no tenes una cobertura de seguro registrada. Si '
-                  'contas con una aseguradora, avisa en recepcion con tu '
-                  'cedula para que la carguen.',
+                  'Todavía no tienes una cobertura de seguro registrada. Si '
+                  'cuentas con una aseguradora, avisa en recepción con tu '
+                  'cédula para que la carguen.',
                   style: AppTypography.cap,
                 ),
               ),

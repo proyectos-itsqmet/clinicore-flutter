@@ -102,8 +102,8 @@ class _HistoryView extends StatelessWidget {
             children: <Widget>[
               const AppSectionHeading(
                 kicker: 'Tu historia',
-                title: 'Historial clinico.',
-                lead: 'Todo lo que paso, en un solo lugar y siempre contigo.',
+                title: 'Historial clínico.',
+                lead: 'Todo lo que pasó, en un solo lugar y siempre contigo.',
               ),
 
               BlocConsumer<HistoryBloc, HistoryState>(
@@ -307,7 +307,7 @@ class _EntryCard extends StatelessWidget {
                 ),
               if (encounter == null)
                 const AppPill(
-                  label: 'Sin resumen clinico',
+                  label: 'Sin resumen clínico',
                   tone: AppPillTone.plain,
                   dense: true,
                 ),

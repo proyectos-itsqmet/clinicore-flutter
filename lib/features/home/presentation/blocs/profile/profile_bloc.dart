@@ -30,6 +30,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     : super(const ProfileState.initial()) {
     on<ProfileRequested>(_onRequested);
     on<ProfileContactSubmitted>(_onContactSubmitted);
+    on<ProfileReset>(_onReset);
   }
 
   final GetMyProfile getMyProfile;
@@ -80,5 +81,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         ),
       ),
     );
+  }
+
+  void _onReset(ProfileReset event, Emitter<ProfileState> emit) {
+    emit(const ProfileState.initial());
   }
 }

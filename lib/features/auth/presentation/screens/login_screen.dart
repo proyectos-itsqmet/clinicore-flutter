@@ -62,7 +62,7 @@ class _LoginViewState extends State<_LoginView> {
   /// contains one and no email address omits one.
   String? _validateIdentity(String? value) {
     final String v = (value ?? '').trim();
-    if (v.isEmpty) return 'Ingresa tu correo o cedula';
+    if (v.isEmpty) return 'Ingresa tu correo o cédula';
     return v.contains('@') ? Validators.email(v) : Validators.cedula(v);
   }
 
@@ -93,7 +93,7 @@ class _LoginViewState extends State<_LoginView> {
         return AuthFormShell(
           subtitle: 'Tus citas y tus recetas en un solo lugar.',
           footer: AuthFooterLink(
-            message: 'No tienes cuenta?',
+            message: '¿No tienes cuenta?',
             actionLabel: 'Crea una',
             onTap: () => context.push(AppPath.registerScreen),
           ),
@@ -105,7 +105,7 @@ class _LoginViewState extends State<_LoginView> {
                 spacing: AppSpacing.section,
                 children: <Widget>[
                   AppTextField(
-                    label: 'Correo o cedula',
+                    label: 'Correo o cédula',
                     controller: _identity,
                     hint: 'tu@correo.com',
                     prefixIcon: AppIcons.email,
@@ -116,9 +116,9 @@ class _LoginViewState extends State<_LoginView> {
                     validator: _validateIdentity,
                   ),
                   AppTextField(
-                    label: 'Contrasena',
+                    label: 'Contraseña',
                     controller: _password,
-                    hint: 'Tu contrasena',
+                    hint: 'Tu contraseña',
                     prefixIcon: AppIcons.password,
                     obscure: true,
                     textInputAction: TextInputAction.done,
@@ -135,7 +135,7 @@ class _LoginViewState extends State<_LoginView> {
             Align(
               alignment: Alignment.centerRight,
               child: _TextLink(
-                label: 'Olvidaste tu contrasena?',
+                label: '¿Olvidaste tu contraseña?',
                 onTap: state.isSubmitting
                     ? null
                     : () => context.push(AppPath.forgotPasswordScreen),

@@ -49,7 +49,7 @@ class PasswordRulesCard extends StatelessWidget {
             label: 'Al menos una letra',
             met: RegExp(r'[A-Za-z]').hasMatch(value),
           ),
-          _Rule(label: 'Al menos un numero', met: RegExp(r'\d').hasMatch(value)),
+          _Rule(label: 'Al menos un número', met: RegExp(r'\d').hasMatch(value)),
         ],
       ),
     );

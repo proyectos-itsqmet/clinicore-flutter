@@ -172,7 +172,7 @@ class _ContactEditSheetState extends State<ContactEditSheet> {
                     enabled: !saving,
                   ),
                   AppTextField(
-                    label: 'Direccion',
+                    label: 'Dirección',
                     controller: _address,
                     enabled: !saving,
                   ),

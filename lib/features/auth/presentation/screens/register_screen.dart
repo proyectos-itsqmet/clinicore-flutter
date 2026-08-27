@@ -77,13 +77,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         builder: (context, state) {
         return AuthFormShell(
           kicker: 'Paso 1 de 3',
-          title: 'Empecemos por lo basico.',
+          title: 'Empecemos por lo básico.',
           subtitle:
-              'Con tu correo y tu cedula te enviamos un codigo para '
+              'Con tu correo y tu cédula te enviamos un código para '
               'confirmar que eres tu.',
           onBack: () => context.pop(),
           footer: AuthFooterLink(
-            message: 'Ya tienes cuenta?',
+            message: '¿Ya tienes cuenta?',
             actionLabel: 'Ingresa',
             onTap: () => context.pop(),
           ),
@@ -106,10 +106,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     validator: Validators.email,
                   ),
                   AppTextField(
-                    label: 'Cedula',
+                    label: 'Cédula',
                     controller: _cedula,
-                    hint: '10 digitos',
-                    helper: 'Tu historia clinica se archiva con este numero.',
+                    hint: '10 dígitos',
+                    helper: 'Tu historia clínica se archiva con este número.',
                     prefixIcon: AppIcons.identityCard,
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
@@ -137,7 +137,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
 
             AppButton(
-              label: 'Enviar codigo',
+              label: 'Enviar código',
               size: AppButtonSize.lg,
               fullWidth: true,
               isLoading: state.isSubmitting,
@@ -221,13 +221,13 @@ class _ConsentRowState extends State<_ConsentRow> {
                   children: <InlineSpan>[
                     const TextSpan(text: 'Acepto los '),
                     TextSpan(
-                      text: 'terminos y condiciones',
+                      text: 'términos y condiciones',
                       style: linkStyle,
                       recognizer: _termsTap,
                     ),
                     const TextSpan(text: ' y la '),
                     TextSpan(
-                      text: 'politica de privacidad',
+                      text: 'política de privacidad',
                       style: linkStyle,
                       recognizer: _privacyTap,
                     ),
@@ -241,7 +241,7 @@ class _ConsentRowState extends State<_ConsentRow> {
         ),
         if (widget.showError)
           Text(
-            'Tienes que aceptar los terminos para continuar',
+            'Tienes que aceptar los términos para continuar',
             style: AppTypography.cap.copyWith(
               color: AppColors.emergency,
               fontWeight: FontWeight.w600,

@@ -15,29 +15,29 @@ class TermsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const LegalDocument(
-      title: 'Terminos y condiciones',
+      title: 'Términos y condiciones',
       intro:
-          'Estas condiciones regulan el uso de la aplicacion de [NOMBRE DE LA '
-          'CLINICA] para agendar turnos y consultar tu informacion clinica.',
+          'Estas condiciones regulan el uso de la aplicación CLINI CORE '
+          'para agendar turnos y consultar tu información clínica.',
       clauses: <LegalClause>[
         LegalClause(
-          title: 'Quien presta el servicio',
+          title: 'Quién presta el servicio',
           body: <String>[
-            'La aplicacion es operada por CliniCore S.A., con domicilio en '
+            'La aplicación es operada por CliniCore S.A., con domicilio en '
                 'Av. de los Shyris N38-120 y El Telegrafo, Quito y RUC 1790000000001.',
-            'El uso de la app no reemplaza la relacion medico-paciente ni '
-                'constituye por si mismo un acto medico.',
+            'El uso de la app no reemplaza la relación médico-paciente ni '
+                'constituye por sí mismo un acto médico.',
           ],
         ),
         LegalClause(
           title: 'Tu cuenta',
           body: <String>[
-            'Para agendar necesitas una cuenta asociada a tu cedula. Los '
+            'Para agendar necesitas una cuenta asociada a tu cédula. Los '
                 'datos que registres deben ser verdaderos y estar '
-                'actualizados: la historia clinica se archiva con ese numero.',
-            'Sos responsable de mantener tu contrasena en reserva. Si '
-                'sospechas que alguien mas accedio a tu cuenta, cambiala y '
-                'avisanos.',
+                'actualizados: la historia clínica se archiva con ese número.',
+            'Eres responsable de mantener tu contraseña en reserva. Si '
+                'sospechas que alguien mas accedió a tu cuenta, cámbiala y '
+                'avísanos.',
           ],
         ),
         LegalClause(
@@ -45,8 +45,8 @@ class TermsScreen extends StatelessWidget {
           body: <String>[
             'Un turno agendado ocupa un cupo real en la agenda de un '
                 'profesional. Podes cancelarlo hasta 24 horas antes de la hora '
-                'reservada sin ningun cargo.',
-            'La politica de ausencias sin aviso es que el cupo se libera de '
+                'reservada sin ningún cargo.',
+            'La política de ausencias sin aviso es que el cupo se libera de '
                 'inmediato y la ausencia queda registrada en tu historial de '
                 'reservas.',
           ],
@@ -55,16 +55,16 @@ class TermsScreen extends StatelessWidget {
           title: 'Valores y cobertura',
           body: <String>[
             'Los valores mostrados antes de confirmar son estimados en base a '
-                'la cobertura registrada de tu plan y pueden variar segun lo '
+                'la cobertura registrada de tu plan y pueden variar según lo '
                 'que efectivamente se realice en la consulta.',
-            'La liquidacion definitiva se emite en la sede.',
+            'La liquidación definitiva se emite en la sede.',
           ],
         ),
         LegalClause(
-          title: 'Uso de la aplicacion',
+          title: 'Uso de la aplicación',
           body: <String>[
             'No podes usar la app para agendar turnos a nombre de terceros sin '
-                'su autorizacion, ni intentar acceder a informacion clinica '
+                'su autorización, ni intentar acceder a información clínica '
                 'que no sea la tuya o la de personas a tu cargo debidamente '
                 'registradas.',
           ],
@@ -72,9 +72,9 @@ class TermsScreen extends StatelessWidget {
         LegalClause(
           title: 'Emergencias',
           body: <String>[
-            'La aplicacion NO es un canal de emergencias. Ante una urgencia, '
+            'La aplicación NO es un canal de emergencias. Ante una urgencia, '
                 'llama al 911 o acude directamente al '
-                'servicio de emergencia mas cercano.',
+                'servicio de emergencia más cercano.',
           ],
         ),
         LegalClause(
@@ -82,15 +82,15 @@ class TermsScreen extends StatelessWidget {
           body: <String>[
             'Hacemos lo razonable para mantener el servicio disponible, pero '
                 'puede haber interrupciones por mantenimiento o por causas '
-                'ajenas a la clinica.',
+                'ajenas a la clínica.',
             'Si estas condiciones cambian, te avisamos en la app antes de que '
-                'la nueva version entre en vigencia.',
+                'la nueva versión entre en vigencia.',
           ],
         ),
         LegalClause(
           title: 'Contacto',
           body: <String>[
-            'Escribinos a contacto@clinicore.ec o llamanos al (02) 380-0100 para '
+            'Escríbenos a contacto@clinicore.ec o llama al (02) 380-0100 para '
                 'cualquier consulta sobre estas condiciones.',
           ],
         ),

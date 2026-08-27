@@ -55,7 +55,7 @@ class AppointmentsScreen extends StatefulWidget {
 }
 
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
-  static const List<String> _filters = <String>['Proximas', 'Pasadas'];
+  static const List<String> _filters = <String>['Próximas', 'Pasadas'];
 
   late final AppointmentsBloc _upcoming =
       sl<AppointmentsBloc>(param1: AppointmentScope.upcoming)
@@ -199,11 +199,11 @@ class AppointmentsList extends StatelessWidget {
                 icon: AppIcons.appointments,
                 title: _isUpcoming
                     ? 'No tienes citas agendadas'
-                    : 'Todavia no tienes citas pasadas',
+                    : 'Todavía no tienes citas pasadas',
                 message: _isUpcoming
-                    ? 'Cuando reserves un turno lo vas a ver aca, con la hora '
+                    ? 'Cuando reserves un turno lo vas a ver acá, con la hora '
                           'exacta y la sede.'
-                    : 'Aca van a quedar las consultas que ya pasaron.',
+                    : 'Acá van a quedar las consultas que ya pasaron.',
                 actionLabel: _isUpcoming ? 'Agendar una cita' : null,
                 // Switches tabs instead of pushing a route: the booking screen
                 // already exists as a branch, and pushing a second copy over
@@ -344,7 +344,7 @@ Future<void> _confirmCancel(BuildContext context, int turnId) async {
     builder: (dialogContext) => AlertDialog(
       title: const Text('Cancelar este turno?'),
       content: const Text(
-        'Esta accion no se puede deshacer. Vas a perder el lugar reservado.',
+        'Esta acción no se puede deshacer. Vas a perder el lugar reservado.',
       ),
       actions: <Widget>[
         TextButton(

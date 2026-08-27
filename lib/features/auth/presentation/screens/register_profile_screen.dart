@@ -232,8 +232,8 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
 
         final Widget form = AuthFormShell(
           kicker: 'Paso 3 de 3',
-          title: 'Cuentanos quien eres.',
-          subtitle: 'Con esto queda lista tu historia clinica.',
+          title: 'Cuéntanos quién eres.',
+          subtitle: 'Con esto queda lista tu historia clínica.',
           onBack: _confirmLeave,
           children: <Widget>[
             Form(
@@ -245,7 +245,7 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
                   AppTextField(
                     label: 'Nombres',
                     controller: _firstName,
-                    hint: 'Como aparece en tu cedula',
+                    hint: 'Cómo aparece en tu cédula',
                     prefixIcon: AppIcons.person,
                     keyboardType: TextInputType.name,
                     textInputAction: TextInputAction.next,
@@ -283,7 +283,7 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
                   ),
 
                   AppTextField(
-                    label: 'Contrasena',
+                    label: 'Contraseña',
                     controller: _password,
                     hint: 'Minimo 8 caracteres',
                     prefixIcon: AppIcons.password,
@@ -294,7 +294,7 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
                     validator: Validators.password,
                   ),
                   AppTextField(
-                    label: 'Repite la contrasena',
+                    label: 'Repite la contraseña',
                     controller: _confirm,
                     hint: 'La misma de arriba',
                     prefixIcon: AppIcons.password,
@@ -328,7 +328,7 @@ class _RegisterProfileScreenState extends State<RegisterProfileScreen> {
                         : Validators.phone(value),
                   ),
                   AppTextField(
-                    label: 'Direccion',
+                    label: 'Dirección',
                     controller: _address,
                     hint: 'Calle y numero',
                     prefixIcon: AppIcons.location,

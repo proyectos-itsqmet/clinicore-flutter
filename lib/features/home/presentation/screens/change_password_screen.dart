@@ -109,7 +109,7 @@ class _ChangePasswordViewState extends State<_ChangePasswordView> {
           ..hideCurrentSnackBar()
           ..showSnackBar(
             const SnackBar(
-              content: Text('Listo, tu contrasena quedo actualizada.'),
+              content: Text('Listo, tu contraseña quedo actualizada.'),
             ),
           );
         Navigator.of(context).pop();
@@ -125,11 +125,11 @@ class _ChangePasswordViewState extends State<_ChangePasswordView> {
           canPop: !saving,
           child: AppScreen(
             topBar: AppTopBar(
-              title: 'Cambiar contrasena',
+              title: 'Cambiar contraseña',
               onBack: saving ? null : () => Navigator.of(context).pop(),
             ),
             footer: AppButton(
-              label: 'Guardar contrasena',
+              label: 'Guardar contraseña',
               size: AppButtonSize.lg,
               fullWidth: true,
               isLoading: saving,
@@ -142,8 +142,8 @@ class _ChangePasswordViewState extends State<_ChangePasswordView> {
                 const SizedBox(height: AppSpacing.section),
 
                 Text(
-                  'Elegi una contrasena nueva. Vas a usarla la proxima vez que '
-                  'ingreses; esta sesion sigue abierta.',
+                  'Elige una contraseña nueva. Vas a usarla la próxima vez que '
+                  'ingreses; esta sesión sigue abierta.',
                   style: AppTypography.body,
                 ),
 
@@ -167,9 +167,9 @@ class _ChangePasswordViewState extends State<_ChangePasswordView> {
                     spacing: AppSpacing.section,
                     children: <Widget>[
                       AppTextField(
-                        label: 'Contrasena nueva',
+                        label: 'Contraseña nueva',
                         controller: _password,
-                        hint: 'Minimo 8 caracteres',
+                        hint: 'Mínimo 8 caracteres',
                         prefixIcon: AppIcons.password,
                         obscure: true,
                         textInputAction: TextInputAction.next,
@@ -180,7 +180,7 @@ class _ChangePasswordViewState extends State<_ChangePasswordView> {
                         validator: Validators.password,
                       ),
                       AppTextField(
-                        label: 'Repite la contrasena',
+                        label: 'Repite la contraseña',
                         controller: _confirm,
                         hint: 'La misma de arriba',
                         prefixIcon: AppIcons.password,
@@ -218,10 +218,10 @@ class _ChangePasswordViewState extends State<_ChangePasswordView> {
                       ),
                       Expanded(
                         child: Text(
-                          'El cambio se aplica a esta cuenta, con la sesion '
-                          'que tenes abierta ahora. Si crees que alguien mas '
-                          'uso tu telefono, cerra sesion en todos tus '
-                          'dispositivos y avisa en recepcion.',
+                          'El cambio se aplica a esta cuenta, con la sesión '
+                          'que tienes abierta ahora. Si crees que alguien mas '
+                          'usó tu teléfono, cierra la sesión en todos tus '
+                          'dispositivos y avisa en recepción.',
                           style: AppTypography.cap,
                         ),
                       ),

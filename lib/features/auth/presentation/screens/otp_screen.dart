@@ -111,12 +111,12 @@ class _OtpScreenState extends State<OtpScreen> {
 
         return AuthFormShell(
           kicker: 'Paso 2 de 3',
-          title: 'Escribe el codigo.',
+          title: 'Escribe el código.',
           subtitle: 'Lo enviamos a $target.',
           onBack: () => context.pop(),
           footer: AuthFooterLink(
-            message: 'Correo equivocado?',
-            actionLabel: 'Cambialo',
+            message: '¿Correo equivocado?',
+            actionLabel: 'Cámbialo',
             onTap: () => context.pop(),
           ),
           children: <Widget>[
@@ -124,7 +124,7 @@ class _OtpScreenState extends State<OtpScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               spacing: AppSpacing.lg,
               children: <Widget>[
-                const AppKicker(text: 'Codigo de 6 digitos', size: 11),
+                const AppKicker(text: 'Código de 6 dígitos', size: 11),
                 OtpField(controller: _code, onCompleted: (_) => _submit()),
                 if (_error != null)
                   Text(
@@ -156,7 +156,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       dense: true,
                     )
                   : AppButton(
-                      label: 'Reenviar codigo',
+                      label: 'Reenviar código',
                       variant: AppButtonVariant.ghost,
                       onPressed: state.isSubmitting
                           ? null
