@@ -39,10 +39,39 @@ abstract final class AppConfig {
         : 'http://localhost:8080';
   }
 
+  /// Base URL of the AI assistant service (`clinicore-ai`), WITHOUT a trailing
+  /// slash.
+  ///
+  /// It is a SEPARATE process from the QMS API: a Flask service on port 8000
+  /// that holds the agent, its OpenAI calls and its tools. That is why it does
+  /// not reuse [apiBaseUrl] — pointing the assistant at 8080 lands on Spring,
+  /// which has no `/chat`.
+  ///
+  /// The same emulator caveat as [apiBaseUrl] applies, and it bites harder here
+  /// because the failure looks like the assistant being down.
+  static String get aiBaseUrl {
+    final String? configured = dotenv.maybeGet('AI_BASE_URL');
+    if (configured != null && configured.isNotEmpty) {
+      return _stripTrailingSlash(configured);
+    }
+    if (kIsWeb) return 'http://localhost:8000';
+    return Platform.isAndroid
+        ? 'http://10.0.2.2:8000'
+        : 'http://localhost:8000';
+  }
+
   /// Connection and response timeouts. Generous rather than tight: the app is
   /// used inside clinics, and hospital wifi is not a fast network.
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 20);
+
+  /// Response timeout for the assistant.
+  ///
+  /// Longer than [receiveTimeout] on purpose. The assistant streams: the
+  /// connection stays open while the model writes, and a reply that consults
+  /// the agenda first can take well over 20 seconds end to end. With the
+  /// regular timeout the stream is cut mid-sentence and it reads as a crash.
+  static const Duration aiReceiveTimeout = Duration(seconds: 90);
 
   /// Whether to log requests. Off in release, always — the auth endpoints
   /// carry passwords and tokens in their bodies and headers.

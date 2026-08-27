@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/assistant/assistant_screen.dart';
 import '../../features/auth/presentation/blocs/auth/auth_bloc.dart';
 import '../../features/auth/presentation/blocs/recovery/recovery_bloc.dart';
 import '../../features/auth/presentation/blocs/registration/registration_bloc.dart';
@@ -153,6 +154,16 @@ class AppRouter {
         path: AppPath.privacyScreen,
         name: PathName.privacyScreen,
         builder: (context, state) => const PrivacyScreen(),
+      ),
+
+      // El asistente virtual. Publico y anonimo: consulta servicios, precios,
+      // especialidades, sedes y turnos disponibles, y nunca datos de un
+      // paciente. Va aca, fuera del shell autenticado, porque quien todavia no
+      // tiene cuenta tiene que poder preguntar antes de registrarse.
+      GoRoute(
+        path: AppPath.assistantScreen,
+        name: PathName.assistantScreen,
+        builder: (context, state) => const AssistantScreen(),
       ),
 
       // ======================================================

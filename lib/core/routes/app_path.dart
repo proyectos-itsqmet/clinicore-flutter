@@ -80,11 +80,25 @@ class AppPath {
   /// what happens when that hand-off is missing.
   static const historyDetailScreen = '/historial/visita';
 
+  //! Asistente virtual de atencion al cliente.
+  //!
+  //! Publico y anonimo por diseno: informa sobre servicios, precios,
+  //! especialidades, sedes y turnos disponibles, y no responde nada de un
+  //! paciente en particular. Alguien que todavia no tiene cuenta tiene que
+  //! poder preguntar "que examenes hacen?" antes de registrarse.
+  static const assistantScreen = '/asistente';
+
   /// Locations reachable with or without a session.
   ///
-  /// The two legal documents, and only those. A patient has to be able to read
-  /// the terms BEFORE agreeing to them, which means before having an account.
-  static const Set<String> publicPaths = <String>{termsScreen, privacyScreen};
+  /// The two legal documents and the assistant. A patient has to be able to
+  /// read the terms BEFORE agreeing to them, which means before having an
+  /// account — and to ask the assistant what the clinic offers before deciding
+  /// to create one.
+  static const Set<String> publicPaths = <String>{
+    termsScreen,
+    privacyScreen,
+    assistantScreen,
+  };
 
   /// Locations that are part of signing in or signing up.
   ///

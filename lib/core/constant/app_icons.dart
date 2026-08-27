@@ -97,6 +97,9 @@ abstract final class AppIcons {
   static const IconData info = PhosphorIconsRegular.info;
   static const IconData whatsapp = PhosphorIconsRegular.whatsappLogo;
 
+  /// El asistente virtual de atencion al cliente.
+  static const IconData assistant = PhosphorIconsRegular.chatCircleDots;
+
   /// Bold, because the boards draw their chevrons at `stroke-width: 2.2`.
   static const IconData chevronRight = PhosphorIconsBold.caretRight;
   static const IconData chevronLeft = PhosphorIconsBold.caretLeft;

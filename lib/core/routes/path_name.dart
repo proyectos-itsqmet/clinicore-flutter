@@ -32,4 +32,7 @@ class PathName {
 
   //! History
   static const historyDetailScreen = 'historial-visita';
+
+  //! Asistente virtual — publico, no requiere sesion.
+  static const assistantScreen = 'asistente';
 }
