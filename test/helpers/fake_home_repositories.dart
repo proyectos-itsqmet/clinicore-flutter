@@ -139,6 +139,20 @@ class FakeBookingRepository implements BookingRepository {
 
   Either<Failure, List<BookingSlot>> schedulesResult = Right(testSlots);
 
+  /// Per-day answers for step 3, for the tests that care WHICH day was asked
+  /// about. A day absent from this map falls back to [schedulesResult], which
+  /// is what every other test relies on.
+  Map<DateTime, List<BookingSlot>> schedulesByDate =
+      <DateTime, List<BookingSlot>>{};
+
+  /// Every day step 3 asked about, in order.
+  ///
+  /// The "today is spent, ask about tomorrow" fallback is only observable
+  /// here: both requests leave the same [lastSchedulesDate] behind by the
+  /// time the state settles, so a single last-value field cannot tell one
+  /// request from two.
+  final List<DateTime> schedulesRequestedDates = <DateTime>[];
+
   Either<Failure, Appointment> bookResult = const Right<Failure, Appointment>(
     Appointment(id: 41, ticket: 7, status: TurnStatus.pending),
   );
@@ -189,6 +203,11 @@ class FakeBookingRepository implements BookingRepository {
     lastSchedulesServiceId = serviceId;
     lastSchedulesDoctorId = doctorId;
     lastSchedulesDate = date;
+    if (date != null) {
+      schedulesRequestedDates.add(date);
+      final List<BookingSlot>? forDay = schedulesByDate[date];
+      if (forDay != null) return Right<Failure, List<BookingSlot>>(forDay);
+    }
     return schedulesResult;
   }
 

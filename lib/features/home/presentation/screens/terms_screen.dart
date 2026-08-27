@@ -23,8 +23,8 @@ class TermsScreen extends StatelessWidget {
         LegalClause(
           title: 'Quien presta el servicio',
           body: <String>[
-            'La aplicacion es operada por [RAZON SOCIAL], con domicilio en '
-                '[DIRECCION] y RUC [RUC].',
+            'La aplicacion es operada por CliniCore S.A., con domicilio en '
+                'Av. de los Shyris N38-120 y El Telegrafo, Quito y RUC 1790000000001.',
             'El uso de la app no reemplaza la relacion medico-paciente ni '
                 'constituye por si mismo un acto medico.',
           ],
@@ -44,9 +44,11 @@ class TermsScreen extends StatelessWidget {
           title: 'Turnos, cancelaciones y ausencias',
           body: <String>[
             'Un turno agendado ocupa un cupo real en la agenda de un '
-                'profesional. Podes cancelarlo hasta [PLAZO] antes de la hora '
+                'profesional. Podes cancelarlo hasta 24 horas antes de la hora '
                 'reservada sin ningun cargo.',
-            'La politica de ausencias sin aviso es [POLITICA].',
+            'La politica de ausencias sin aviso es que el cupo se libera de '
+                'inmediato y la ausencia queda registrada en tu historial de '
+                'reservas.',
           ],
         ),
         LegalClause(
@@ -71,7 +73,7 @@ class TermsScreen extends StatelessWidget {
           title: 'Emergencias',
           body: <String>[
             'La aplicacion NO es un canal de emergencias. Ante una urgencia, '
-                'llama al [NUMERO DE EMERGENCIA] o acude directamente al '
+                'llama al 911 o acude directamente al '
                 'servicio de emergencia mas cercano.',
           ],
         ),
@@ -88,7 +90,7 @@ class TermsScreen extends StatelessWidget {
         LegalClause(
           title: 'Contacto',
           body: <String>[
-            'Escribinos a [CORREO DE CONTACTO] o llamanos al [TELEFONO] para '
+            'Escribinos a contacto@clinicore.ec o llamanos al (02) 380-0100 para '
                 'cualquier consulta sobre estas condiciones.',
           ],
         ),

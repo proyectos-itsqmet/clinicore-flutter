@@ -62,10 +62,18 @@ class BookingState extends Equatable {
   final BookingDoctor? doctor;
 
   // ---- Step 3: Horario ----
+  /// The day's free slots, with anything already begun removed — see
+  /// `BookingBloc._fetchSchedules`. Never a mixed bag of days: step 3 asks
+  /// about exactly one.
   final List<BookingSlot> schedules;
 
-  /// `null` means "todos los dias" — the web flow's cleared date filter.
+  /// The day step 3 is showing, at local midnight.
+  ///
+  /// Null only BEFORE step 3 — entering it always resolves a day, so the
+  /// schedule step never renders without one. There is no "todos los dias"
+  /// any more: it meant asking the server for every free slot it had.
   final DateTime? dateFilter;
+
   final BookingSlot? schedule;
 
   // ---- Step 4: Confirmado ----
@@ -166,7 +174,6 @@ class BookingState extends Equatable {
     Failure? failure,
     bool clearService = false,
     bool clearDoctor = false,
-    bool clearDateFilter = false,
     bool clearSchedule = false,
     bool clearBooked = false,
     bool clearFailure = false,
@@ -186,7 +193,10 @@ class BookingState extends Equatable {
       // thing.
       doctor: clearDoctor ? null : (doctor ?? this.doctor),
       schedules: schedules ?? this.schedules,
-      dateFilter: clearDateFilter ? null : (dateFilter ?? this.dateFilter),
+      // No `clearDateFilter` flag: nothing clears the day back to nothing.
+      // Step 3 always has one, and leaving it is what `BookingReset` does by
+      // rebuilding from `initial()`.
+      dateFilter: dateFilter ?? this.dateFilter,
       schedule: clearSchedule ? null : (schedule ?? this.schedule),
       booked: clearBooked ? null : (booked ?? this.booked),
       failure: clearFailure ? null : (failure ?? this.failure),

@@ -1,5 +1,6 @@
 import 'package:clinicore_flutter/core/error/failures.dart';
 import 'package:clinicore_flutter/features/home/domain/entities/appointment.dart';
+import 'package:clinicore_flutter/features/home/domain/entities/availability.dart';
 import 'package:clinicore_flutter/features/home/domain/entities/establishment.dart';
 import 'package:clinicore_flutter/features/home/domain/usecases/booking_usecases.dart';
 import 'package:clinicore_flutter/features/home/presentation/blocs/booking/booking_bloc.dart';
@@ -18,17 +19,26 @@ void main() {
 
   setUp(() => repository = FakeBookingRepository());
 
-  BookingBloc buildBloc() => BookingBloc(
+  /// 08:00 on [testDay], which is BEFORE both fixture slots (09:00 and 10:00).
+  ///
+  /// Step 3 refuses to list a slot that has already begun, so the clock is now
+  /// part of every step-3 fixture: with a real `DateTime.now()` these tests
+  /// would assert on a list whose contents depend on when the suite runs.
+  final DateTime testClock = DateTime(2026, 11, 12, 8);
+
+  BookingBloc buildBloc({DateTime? clock}) => BookingBloc(
     getEstablishments: GetEstablishments(repository),
     getServicesWithDoctors: GetServicesWithDoctors(repository),
     getFreeSchedules: GetFreeSchedules(repository),
     bookSlot: BookSlot(repository),
+    clock: () => clock ?? testClock,
   );
 
   /// Walks a fresh bloc to step 3 with `testEstablishments[0]`,
   /// `testConsultationService` and `testDoctors[0]`, and returns it.
-  Future<BookingBloc> bookingAtScheduleStep() async {
-    final BookingBloc bloc = buildBloc()..add(const BookingStarted());
+  Future<BookingBloc> bookingAtScheduleStep({DateTime? clock}) async {
+    final BookingBloc bloc = buildBloc(clock: clock)
+      ..add(const BookingStarted());
     await bloc.stream.firstWhere((s) => s.step == BookingStep.establishment && s.establishments.isNotEmpty);
 
     bloc.add(BookingEstablishmentSelected(testEstablishments[0]));
@@ -155,7 +165,9 @@ void main() {
 
       bloc.add(BookingDateFilterChanged(DateTime(2026, 11, 20)));
       final BookingState state = await bloc.stream.firstWhere(
-        (s) => s.dateFilter != null,
+        (s) =>
+            s.status == BookingStatus.ready &&
+            s.dateFilter == DateTime(2026, 11, 20),
       );
 
       expect(state.dateFilter, DateTime(2026, 11, 20));
@@ -163,18 +175,19 @@ void main() {
       await bloc.close();
     });
 
-    test('clearing the date filter asks again with no date', () async {
+    test('there is no "todos los dias": every request names ONE day', () async {
       final BookingBloc bloc = await bookingAtScheduleStep();
       bloc.add(BookingDateFilterChanged(DateTime(2026, 11, 20)));
-      await bloc.stream.firstWhere((s) => s.dateFilter != null);
-
-      bloc.add(const BookingDateFilterChanged(null));
-      final BookingState state = await bloc.stream.firstWhere(
-        (s) => s.status == BookingStatus.ready && s.dateFilter == null,
+      await bloc.stream.firstWhere(
+        (s) =>
+            s.status == BookingStatus.ready &&
+            s.dateFilter == DateTime(2026, 11, 20),
       );
 
-      expect(state.dateFilter, isNull);
-      expect(repository.lastSchedulesDate, isNull);
+      // The bug this replaces: a null date sent NO `date` parameter, so the
+      // server answered with every free slot across every day at once.
+      expect(repository.schedulesRequestedDates, isNotEmpty);
+      expect(repository.schedulesRequestedDates, everyElement(isNotNull));
       await bloc.close();
     });
 
@@ -189,6 +202,167 @@ void main() {
       expect(state.schedule, testSlots[1]);
       expect(state.step, BookingStep.schedule);
       expect(repository.lastBookedScheduleId, isNull);
+      await bloc.close();
+    });
+  });
+
+  group('step 3 — a slot that already started is not on offer', () {
+    test('a slot whose hour has passed never reaches the state', () async {
+      // 09:30. testSlots holds 09:00 and 10:00, both STATUS_FREE — nobody
+      // booked the 09:00, which is exactly why the server still returns it
+      // and why the app has to be the one to drop it.
+      final BookingBloc bloc = await bookingAtScheduleStep(
+        clock: DateTime(2026, 11, 12, 9, 30),
+      );
+
+      expect(bloc.state.schedules, hasLength(1));
+      expect(bloc.state.schedules.single.time, '10:00');
+      await bloc.close();
+    });
+
+    test('a day whose slots have ALL passed reads as empty', () async {
+      final BookingBloc bloc = await bookingAtScheduleStep(
+        clock: DateTime(2026, 11, 12, 23),
+      );
+
+      bloc.add(BookingDateFilterChanged(testDay));
+      final BookingState state = await bloc.stream.firstWhere(
+        (s) => s.status == BookingStatus.ready && s.dateFilter == testDay,
+      );
+
+      // The reason the filter lives in the bloc and not in the widget: with a
+      // widget-side filter the state would still say "two slots" here, and
+      // `hasNoSchedules` — the only thing that tells the patient to try
+      // another day — would stay false on the one day it is needed.
+      expect(state.schedules, isEmpty);
+      expect(state.hasNoSchedules, isTrue);
+      await bloc.close();
+    });
+
+    test('the day boundary is respected, not just the hour', () async {
+      // 08:00 on the 13th. The fixture slots are 09:00 and 10:00 on the 12th:
+      // later HOURS, earlier DAY. Comparing hours alone would keep both.
+      final BookingBloc bloc = await bookingAtScheduleStep(
+        clock: DateTime(2026, 11, 13, 8),
+      );
+
+      bloc.add(BookingDateFilterChanged(testDay));
+      final BookingState state = await bloc.stream.firstWhere(
+        (s) => s.status == BookingStatus.ready && s.dateFilter == testDay,
+      );
+
+      expect(state.schedules, isEmpty);
+      await bloc.close();
+    });
+  });
+
+  group('step 3 — the day it opens on', () {
+    final DateTime today = DateTime(2026, 11, 12);
+    final DateTime tomorrow = DateTime(2026, 11, 13);
+
+    test('opens on TODAY when today still has slots', () async {
+      final BookingBloc bloc = await bookingAtScheduleStep();
+
+      expect(bloc.state.dateFilter, today);
+      expect(repository.schedulesRequestedDates, <DateTime>[today]);
+      await bloc.close();
+    });
+
+    test('falls through to TOMORROW when today is spent', () async {
+      repository.schedulesByDate = <DateTime, List<BookingSlot>>{
+        today: <BookingSlot>[],
+        tomorrow: <BookingSlot>[
+          BookingSlot(
+            scheduleId: 900,
+            date: tomorrow,
+            time: '08:00',
+            isFree: true,
+          ),
+        ],
+      };
+
+      // 19:00: the clinic's day is over, but tomorrow's is not.
+      final BookingBloc bloc = await bookingAtScheduleStep(
+        clock: DateTime(2026, 11, 12, 19),
+      );
+
+      expect(repository.schedulesRequestedDates, <DateTime>[today, tomorrow]);
+      expect(bloc.state.dateFilter, tomorrow);
+      expect(bloc.state.schedules, hasLength(1));
+      await bloc.close();
+    });
+
+    test('never emits the empty today on the way to tomorrow', () async {
+      repository.schedulesByDate = <DateTime, List<BookingSlot>>{
+        today: <BookingSlot>[],
+        tomorrow: <BookingSlot>[
+          BookingSlot(
+            scheduleId: 900,
+            date: tomorrow,
+            time: '08:00',
+            isFree: true,
+          ),
+        ],
+      };
+
+      final BookingBloc bloc = buildBloc(clock: DateTime(2026, 11, 12, 19))
+        ..add(const BookingStarted());
+      await bloc.stream.firstWhere((s) => s.establishments.isNotEmpty);
+      bloc.add(BookingEstablishmentSelected(testEstablishments[0]));
+      await bloc.stream.firstWhere(
+        (s) => s.step == BookingStep.serviceAndDoctor && s.status == BookingStatus.ready,
+      );
+
+      final List<BookingState> seen = <BookingState>[];
+      final sub = bloc.stream.listen(seen.add);
+
+      bloc.add(
+        BookingServiceAndDoctorSelected(testConsultationService, testDoctors[0]),
+      );
+      await bloc.stream.firstWhere(
+        (s) => s.status == BookingStatus.ready && s.dateFilter == tomorrow,
+      );
+      await sub.cancel();
+
+      // A `ready` empty today between the two requests would flash "Sin
+      // horarios libres" for one frame on a screen about to show a full list.
+      expect(
+        seen.where(
+          (BookingState s) =>
+              s.status == BookingStatus.ready &&
+              s.dateFilter == today &&
+              s.schedules.isEmpty,
+        ),
+        isEmpty,
+      );
+      await bloc.close();
+    });
+
+    test('a FAILED today is reported, never retried as tomorrow', () async {
+      repository.schedulesResult = const Left<Failure, List<BookingSlot>>(
+        ServerFailure(message: 'Se cayo el servidor'),
+      );
+
+      final BookingBloc bloc = buildBloc()..add(const BookingStarted());
+      await bloc.stream.firstWhere((s) => s.establishments.isNotEmpty);
+      bloc.add(BookingEstablishmentSelected(testEstablishments[0]));
+      await bloc.stream.firstWhere(
+        (s) => s.step == BookingStep.serviceAndDoctor && s.status == BookingStatus.ready,
+      );
+      bloc.add(
+        BookingServiceAndDoctorSelected(testConsultationService, testDoctors[0]),
+      );
+      final BookingState state = await bloc.stream.firstWhere(
+        (s) => s.status == BookingStatus.failure,
+      );
+
+      // Silently moving to tomorrow would answer a question nobody asked and
+      // bury the real error. One request, one honest failure.
+      expect(repository.schedulesRequestedDates, <DateTime>[today]);
+      expect(state.failure, isA<ServerFailure>());
+      // The chip still has to show which day failed, or "Reintentar" has
+      // nothing to retry against.
+      expect(state.dateFilter, today);
       await bloc.close();
     });
   });

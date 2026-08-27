@@ -63,6 +63,10 @@ class _BookingView extends StatelessWidget {
         context.read<AuthBloc>().add(const AuthSessionExpired());
       },
       builder: (BuildContext context, BookingState state) {
+        // Step 3's commit action, and only once there is something to commit.
+        final bool showConfirmBar =
+            state.step == BookingStep.schedule && state.schedule != null;
+
         // The guard is OUTSIDE the scroll view rather than around one step:
         // it has to be registered with this route for as long as the wizard
         // is on screen, not only while a particular step is drawn.
@@ -79,32 +83,63 @@ class _BookingView extends StatelessWidget {
             type: MaterialType.transparency,
             child: SafeArea(
               bottom: false,
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(
-                  left: AppSpacing.pad,
-                  right: AppSpacing.pad,
-                  top: AppSpacing.sectionY * 0.5,
-                  // With `extendBody` on the shell, this is the nav bar's
-                  // height.
-                  bottom: AppSpacing.sectionY * 0.5 + context.bottomSafeInset,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: AppSpacing.section,
-                  children: <Widget>[
-                    _WizardHeader(state: state),
-                    switch (state.step) {
-                      BookingStep.establishment => _EstablishmentStep(
-                        state: state,
+              // The scroll view no longer owns the whole screen: step 3's
+              // "Confirmar turno" is pinned BELOW it — see [_ConfirmBar] for
+              // why that button cannot live at the end of the list.
+              child: Column(
+                children: <Widget>[
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.only(
+                        left: AppSpacing.pad,
+                        right: AppSpacing.pad,
+                        top: AppSpacing.sectionY * 0.5,
+                        // With `extendBody` on the shell, `bottomSafeInset` is
+                        // the nav bar's height. It is only owed here when the
+                        // confirm bar is absent: when the bar is up it sits
+                        // between this scroll view and the nav bar and pays
+                        // that inset itself, so adding it twice would leave a
+                        // nav bar's worth of dead space above the bar.
+                        bottom:
+                            AppSpacing.sectionY * 0.5 +
+                            (showConfirmBar ? 0 : context.bottomSafeInset),
                       ),
-                      BookingStep.serviceAndDoctor => _ServiceAndDoctorStep(
-                        state: state,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        spacing: AppSpacing.section,
+                        children: <Widget>[
+                          _WizardHeader(state: state),
+                          switch (state.step) {
+                            BookingStep.establishment => _EstablishmentStep(
+                              state: state,
+                            ),
+                            BookingStep.serviceAndDoctor =>
+                              _ServiceAndDoctorStep(state: state),
+                            BookingStep.schedule => _ScheduleStep(state: state),
+                            BookingStep.confirmed => _ConfirmedStep(
+                              state: state,
+                            ),
+                          },
+                        ],
                       ),
-                      BookingStep.schedule => _ScheduleStep(state: state),
-                      BookingStep.confirmed => _ConfirmedStep(state: state),
-                    },
-                  ],
-                ),
+                    ),
+                  ),
+                  // `bottomCenter`, not `topCenter`: while the box grows, the
+                  // bar is taller than the box and overflows past the aligned
+                  // edge. Aligned to the top it overflows DOWNWARD — off the
+                  // bottom of the screen — so mid-animation the button is
+                  // laid out below the viewport entirely. Aligned to the
+                  // bottom it overflows upward instead, which both keeps it on
+                  // screen and reads as the bar rising into place.
+                  AnimatedSize(
+                    duration: AppMotion.morph,
+                    curve: AppMotion.easeBrand,
+                    alignment: Alignment.bottomCenter,
+                    child: showConfirmBar
+                        ? _ConfirmBar(state: state)
+                        : const SizedBox(width: double.infinity),
+                  ),
+                ],
               ),
             ),
           ),
@@ -414,7 +449,9 @@ class _ServiceCard extends StatelessWidget {
   }
 }
 
-/// Step 3: pick a FREE slot, with a quick date filter above the list.
+/// Step 3: pick a FREE slot for ONE day, from a grid.
+///
+/// The "Confirmar turno" button is deliberately NOT here — see [_ConfirmBar].
 class _ScheduleStep extends StatelessWidget {
   const _ScheduleStep({required this.state});
 
@@ -422,9 +459,7 @@ class _ScheduleStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final BookingBloc bloc = context.read<BookingBloc>();
     final bool loading = state.status == BookingStatus.loadingSchedules;
-    final bool booking = state.status == BookingStatus.booking;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -450,38 +485,138 @@ class _ScheduleStep extends StatelessWidget {
             icon: AppIcons.calendar,
             title: 'Sin horarios libres',
             message:
-                'No hay cupos disponibles para estos filtros. Proba otra '
-                'fecha o otro servicio.',
+                'No quedan cupos para este dia. Proba con otra fecha o con '
+                'otro servicio.',
           )
         else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: AppSpacing.sm,
-            children: <Widget>[
-              for (final BookingSlot slot in state.schedules)
-                AppChip(
-                  // With no date filter, a chip can be any upcoming day, so
-                  // the date has to be on the label — otherwise two 09:00
-                  // chips a week apart would read as one duplicated slot.
-                  label: state.dateFilter == null
-                      ? '${shortDate(slot.date)} ${slot.time}'
-                      : slot.time,
-                  selected: state.schedule == slot,
+          _SlotGrid(slots: state.schedules, selected: state.schedule),
+      ],
+    );
+  }
+}
+
+/// The day's free slots, laid out four to a row.
+///
+/// ## Why a grid and not the column of full-width chips this replaced
+///
+/// A slot label is five characters. Giving `09:00` the full 350px of a phone
+/// and its own 46px row meant a service with thirty cupos produced roughly
+/// 1600px of scrolling — four screens of one number each, with the confirm
+/// button somewhere past the end of it. Four columns turn the same thirty
+/// slots into eight rows, and a time grid is also how every appointment app
+/// draws this, because scanning for "is there anything around eleven" is a
+/// two-dimensional job.
+///
+/// ## Why [Wrap] over [GridView]
+///
+/// A [GridView] inside a [SingleChildScrollView] needs `shrinkWrap` plus
+/// [NeverScrollableScrollPhysics], and it imposes the cell HEIGHT through
+/// `childAspectRatio` — a ratio that is correct on one screen width and wrong
+/// on the next. [Wrap] with an explicit cell width lets [AppChip] keep the
+/// 46px minimum it was drawn with, at any width.
+class _SlotGrid extends StatelessWidget {
+  const _SlotGrid({required this.slots, required this.selected});
+
+  final List<BookingSlot> slots;
+  final BookingSlot? selected;
+
+  /// Four fits `09:00` at the chip's type size on a 390px board with the
+  /// page gutter removed. It is a ceiling, not a fixed count: [_cellWidth]
+  /// drops to three columns rather than let a label ellipsize, because a slot
+  /// chip reading `09:0...` is not a slot chip.
+  static const int _maxColumns = 4;
+  static const double _minCellWidth = 76;
+  static const double _gap = AppSpacing.sm;
+
+  static double _cellWidth(double available) {
+    for (int columns = _maxColumns; columns > 1; columns--) {
+      final double width = (available - _gap * (columns - 1)) / columns;
+      if (width >= _minCellWidth) return width;
+    }
+    return available;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final BookingBloc bloc = context.read<BookingBloc>();
+
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final double cell = _cellWidth(constraints.maxWidth);
+
+        return Wrap(
+          spacing: _gap,
+          runSpacing: _gap,
+          children: <Widget>[
+            for (final BookingSlot slot in slots)
+              SizedBox(
+                width: cell,
+                // Only the hour. The day is already answered by the filter
+                // bar directly above, and every chip on screen shares it —
+                // the list used to carry a date per chip precisely because
+                // "todos los dias" could mix them.
+                child: AppChip(
+                  label: slot.time,
+                  selected: selected == slot,
                   expand: true,
                   onTap: () => bloc.add(BookingScheduleSelected(slot)),
                 ),
-            ],
-          ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
 
-        if (state.schedule != null)
-          AppButton(
-            label: booking ? 'Reservando...' : 'Confirmar turno',
-            fullWidth: true,
-            onPressed: !booking
-                ? () => bloc.add(const BookingConfirmed())
-                : null,
-          ),
-      ],
+/// "Confirmar turno", pinned to the bottom of the screen.
+///
+/// ## The bug this fixes
+///
+/// This button used to be the LAST child of step 3's column, inside the
+/// wizard's scroll view — so it sat below every slot chip. A specialty with
+/// a full day of cupos put it past a screen and a half of scrolling, which
+/// means the patient tapped their slot and then had to go looking for the way
+/// to commit it. The grid above shortens that list a lot; pinning the button
+/// is what makes its position independent of the list's length, which is the
+/// actual guarantee worth having.
+///
+/// It renders only once a slot is chosen — before that there is nothing to
+/// confirm, and a permanently disabled bar eating the bottom of the screen
+/// would cost the slot list the space it just got back.
+class _ConfirmBar extends StatelessWidget {
+  const _ConfirmBar({required this.state});
+
+  final BookingState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool booking = state.status == BookingStatus.booking;
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        // The hairline is what separates the bar from content scrolling
+        // underneath it. Without it the button appears to float in the list.
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: AppSpacing.pad,
+          right: AppSpacing.pad,
+          top: AppSpacing.lg,
+          // The bar is the bottom-most thing in the branch, so it — not the
+          // scroll view — is what has to clear the shell's nav bar.
+          bottom: AppSpacing.lg + context.bottomSafeInset,
+        ),
+        child: AppButton(
+          label: booking ? 'Reservando...' : 'Confirmar turno',
+          fullWidth: true,
+          onPressed: !booking
+              ? () => context.read<BookingBloc>().add(const BookingConfirmed())
+              : null,
+        ),
+      ),
     );
   }
 }
@@ -520,14 +655,28 @@ class _SelectionRecap extends StatelessWidget {
   }
 }
 
-/// "Todos" / "Hoy" / "Manana" / a picked day — mirrors
-/// `setTodayFilter`/`setTomorrowFilter`/`clearDateFilter`/`onDateChange`.
-/// "Hoy" and "Manana" are resolved to a concrete midnight [DateTime] HERE,
-/// in the widget: [BookingBloc] takes whatever [DateTime] it is given and
-/// never calls `DateTime.now()` itself.
+/// "Hoy" / "Manana" / a picked day. Step 3 always shows exactly one of them.
+///
+/// ## "Todos" is gone, and that is the point
+///
+/// There used to be a fourth chip that cleared the filter. Clearing it sent
+/// no `date` to `/api/schedules` at all, so the server answered with every
+/// free slot it had across every day — up to the data source's 1000-row
+/// ceiling — and step 3 rendered all of them. That is the wall of chips this
+/// screen was drowning in. There is no way to ask for "todos los dias" any
+/// more, which is why [BookingDateFilterChanged] no longer accepts null.
+///
+/// ## Both clocks are the bloc's
+///
+/// `today` comes from `BookingBloc.now`, not from a `DateTime.now()` read
+/// here. The bloc resolves the opening day itself now, so a second clock in
+/// this widget could mark "Hoy" for a list the bloc fetched for yesterday —
+/// a one-minute window at midnight, and a confusing one.
 class _DateFilterBar extends StatelessWidget {
   const _DateFilterBar({required this.current});
 
+  /// The day step 3 is showing. Null only in the instant before the first
+  /// load resolves one.
   final DateTime? current;
 
   static DateTime _midnight(DateTime value) =>
@@ -539,20 +688,21 @@ class _DateFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final BookingBloc bloc = context.read<BookingBloc>();
-    final DateTime today = _midnight(DateTime.now());
-    final DateTime tomorrow = today.add(const Duration(days: 1));
+    final DateTime today = _midnight(bloc.now());
+    // Not `today.add(Duration(days: 1))`: see `BookingBloc._tomorrow`.
+    final DateTime tomorrow = DateTime(today.year, today.month, today.day + 1);
+
+    // A day reached through the picker is neither "Hoy" nor "Manana", and it
+    // needs to say which day it IS — otherwise the patient picks the 14th and
+    // the bar goes back to looking exactly like it did before they tapped.
+    final bool isPickedDay =
+        current != null &&
+        !_isSameDay(current, today) &&
+        !_isSameDay(current, tomorrow);
 
     return Row(
       spacing: AppSpacing.sm,
       children: <Widget>[
-        Expanded(
-          child: AppChip(
-            label: 'Todos',
-            selected: current == null,
-            onTap: () =>
-                bloc.add(const BookingDateFilterChanged(null)),
-          ),
-        ),
         Expanded(
           child: AppChip(
             label: 'Hoy',
@@ -567,23 +717,32 @@ class _DateFilterBar extends StatelessWidget {
             onTap: () => bloc.add(BookingDateFilterChanged(tomorrow)),
           ),
         ),
-        IconButton(
-          tooltip: 'Elegir fecha',
-          onPressed: () async {
-            final DateTime? picked = await showDatePicker(
-              context: context,
-              initialDate: current ?? today,
-              firstDate: today,
-              lastDate: today.add(const Duration(days: 180)),
-            );
-            if (picked == null) return;
-            bloc.add(BookingDateFilterChanged(_midnight(picked)));
-          },
-          icon: const Icon(AppIcons.calendar, size: 20),
-          color: AppColors.ink2,
+        Expanded(
+          child: AppChip(
+            label: isPickedDay ? shortDate(current!) : 'Otro dia',
+            selected: isPickedDay,
+            onTap: () => _pickDay(context, bloc, today),
+          ),
         ),
       ],
     );
+  }
+
+  Future<void> _pickDay(
+    BuildContext context,
+    BookingBloc bloc,
+    DateTime today,
+  ) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? today,
+      // Never earlier than today: a past day has no bookable slot on it, and
+      // the server refuses one anyway — see `TurnService.requireUpcoming`.
+      firstDate: today,
+      lastDate: DateTime(today.year, today.month, today.day + 180),
+    );
+    if (picked == null) return;
+    bloc.add(BookingDateFilterChanged(_midnight(picked)));
   }
 }
 
