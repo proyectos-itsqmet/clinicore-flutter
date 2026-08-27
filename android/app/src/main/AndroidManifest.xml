@@ -10,6 +10,12 @@
     <!-- Required by local_auth for BiometricPrompt. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- Necesario para que el paciente pueda consultarle al asistente por
+         audio (paquete `record`). Sin esta linea el permiso NO se puede pedir
+         en tiempo de ejecucion: la app no falla al compilar, falla al grabar,
+         y el error se lee como "el microfono no anda". -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <application
         android:label="CliniCore"
         android:name="${applicationName}"
