@@ -25,6 +25,21 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "app_type"
+
+    productFlavors {
+        create("app_prod") {
+            dimension = "app_type"
+            applicationId = "com.example.clinicore_flutter.prod"
+            manifestPlaceholders["appName"] = "Clini Core Prod"
+        }
+        create("app_dev") {
+            dimension = "app_type"
+            applicationId = "com.example.clinicore_flutter.dev"
+            manifestPlaceholders["appName"] = "Clini Core Dev"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
