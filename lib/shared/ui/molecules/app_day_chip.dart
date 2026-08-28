@@ -3,27 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/theme.dart';
 import '../atoms/atoms.dart';
 
-/// A selectable day: the weekday above, the date below.
-///
-/// Straight from the booking widget's "2 / Dia" row:
-///
-/// ```html
-/// <button style="display: flex; flex-direction: column; align-items: center;
-///   gap: 2px; min-height: 62px; padding: 9px 0; border-radius: 16px;
-///   transition: background-color 180ms linear;">
-///   <span style="font-size: 11px; font-weight: 500;">Lun</span>
-///   <span class="fig" style="font-size: 18px;">10</span>
-/// </button>
-/// ```
-///
-/// Note what it does NOT do: unlike [AppChip], it keeps its 16px radius when
-/// selected. The board morphs a chip into a pill because a chip is a lozenge
-/// either way; a two-line square becoming a pill would squash. The selection
-/// is carried by the fill alone here, which is why the fill transition is the
-/// one thing that has to be animated.
-///
-/// The date is an [AppFigure], so a row of days does not jitter between
-/// single- and double-digit dates.
 class AppDayChip extends StatelessWidget {
   const AppDayChip({
     super.key,
@@ -34,21 +13,11 @@ class AppDayChip extends StatelessWidget {
     this.onTap,
   });
 
-  /// Three letters, as the board writes them: `Lun`, `Mar`, `Mie`.
   final String weekday;
-
-  /// Day of the month.
   final String day;
-
   final bool selected;
-
-  /// A day with no slots left. Still shown — a gap in the row would make the
-  /// user count dates to work out which day is missing.
   final bool disabled;
-
   final VoidCallback? onTap;
-
-  /// `min-height: 62px`.
   static const double minHeight = 62;
 
   @override

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/theme.dart';
 
-/// One destination in [AppBottomNav].
 @immutable
 class AppNavItem {
   const AppNavItem({required this.label, required this.icon});
@@ -13,36 +12,6 @@ class AppNavItem {
   final IconData icon;
 }
 
-/// The app's bottom navigation bar.
-///
-/// The design boards have no bottom navigation — the web app is a landing
-/// page, not a tabbed app — so this is **derived**, and it is derived from the
-/// one piece of bottom chrome the mobile board does draw: `.actionbar`.
-///
-/// ```css
-/// .actionbar {
-///   position: absolute; left: 0; right: 0; bottom: 0;
-///   padding: 12px 16px 14px;
-///   background-color: rgb(255 255 255 / .92);
-///   backdrop-filter: blur(16px);
-///   border-top: 1px solid var(--line);
-/// }
-/// ```
-///
-/// Everything structural comes from there: the translucent white ground, the
-/// 16px blur behind it, the single hairline on top, and the asymmetric
-/// vertical padding (12 above, 14 below — the extra 2px reads as optical
-/// centring once the labels are in).
-///
-/// The **active treatment** is the part with no direct source, so it borrows
-/// the system's existing "this one is active" language rather than inventing
-/// a third: a `tint` pill behind the glyph. That is exactly what
-/// `panel-admin/Movil.dc.html` does for its selected nav row, and it is the
-/// same tint/surface relationship the segmented control's thumb uses,
-/// inverted. An underline or a dot would have been a new idea; this is not.
-///
-/// Note the blur conversion, same as [AppGlass]: CSS `blur(16px)` is roughly
-/// 2 sigma, so Flutter wants 8.
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
     super.key,
@@ -55,10 +24,8 @@ class AppBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onSelected;
 
-  /// `background-color: rgb(255 255 255 / .92)`.
   static const double _groundAlpha = 0.92;
 
-  /// `backdrop-filter: blur(16px)` expressed as a Gaussian sigma.
   static const double _blurSigma = 8;
 
   @override
@@ -72,8 +39,6 @@ class AppBottomNav extends StatelessWidget {
             border: const Border(top: BorderSide(color: AppColors.line)),
           ),
           child: Padding(
-            // `padding: 12px 16px 14px`, plus the system gesture inset so the
-            // bar never sits under the home indicator.
             padding: EdgeInsets.only(
               top: AppSpacing.lg,
               left: AppSpacing.padChrome,

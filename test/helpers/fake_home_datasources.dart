@@ -59,6 +59,7 @@ class FakeBookingRemoteDataSource implements BookingRemoteDataSource {
   TurnModel bookResult = const TurnModel(
     id: 41,
     order: 7,
+    ticket: 'C-007',
     status: 'TURN_PENDING',
   );
   AppException? bookError;

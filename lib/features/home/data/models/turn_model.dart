@@ -26,6 +26,7 @@ class TurnModel {
   const TurnModel({
     required this.id,
     required this.order,
+    required this.ticket,
     required this.status,
     this.schedule,
     this.finishedAt,
@@ -33,10 +34,21 @@ class TurnModel {
 
   factory TurnModel.fromJson(Map<String, dynamic> json) {
     final Map<String, dynamic> scheduleJson = readMap(json['schedule']);
+    final int order = readInt(json['order']);
+
+    // El ticket lo formatea el backend con `utils/Ticket`; aca NO se deriva.
+    // Derivarlo exigiria conocer el prefijo del servicio, que este endpoint no
+    // manda, y dejaria a la app inventando un formato que la pantalla de sala
+    // podria dejar de compartir sin que nadie se entere.
+    //
+    // Ausente o en blanco caen al mismo lugar: una cadena vacia no es un
+    // ticket. Se pierde el prefijo, no el numero.
+    final String? enviado = readStringOrNull(json['ticket']);
 
     return TurnModel(
       id: readInt(json['id']),
-      order: readInt(json['order']),
+      order: order,
+      ticket: (enviado == null || enviado.trim().isEmpty) ? '$order' : enviado.trim(),
       status: readStringOrNull(json['status']),
       schedule: scheduleJson.isEmpty
           ? null
@@ -46,7 +58,14 @@ class TurnModel {
   }
 
   final int id;
+
+  /// El contador interno del backend. Se conserva porque es el que decide el
+  /// orden de la cola; lo que se MUESTRA es `ticket`.
   final int order;
+
+  /// `"H-003"`, ya formateado por el backend. Ver el docblock de `Appointment`.
+  final String ticket;
+
   final String? status;
   final ScheduleRefModel? schedule;
   final DateTime? finishedAt;
@@ -55,7 +74,7 @@ class TurnModel {
     final ScheduleRefModel? s = schedule;
     return Appointment(
       id: id,
-      ticket: order,
+      ticket: ticket,
       status: TurnStatus.fromApi(status),
       date: s?.date,
       time: s?.hour,

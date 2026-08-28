@@ -75,7 +75,8 @@ class _ProfileView extends StatelessWidget {
 
             // The destinations, ordered by how often they are needed: the
             // record first, then the one setting a patient actually changes,
-            // then the two documents almost nobody re-reads.
+            // then the assistant, then the two documents almost nobody
+            // re-reads.
             AppListRow(
               icon: AppIcons.personalInfo,
               label: 'Mi información',
@@ -87,6 +88,22 @@ class _ProfileView extends StatelessWidget {
               label: 'Cambiar contraseña',
               supporting: 'Elige una nueva para tu cuenta',
               onTap: () => context.push(AppPath.changePasswordScreen),
+            ),
+
+            // Same label as the login screen on purpose: it is the same
+            // assistant, and naming it twice invites the patient to wonder
+            // whether it is a second, different thing.
+            //
+            // The supporting line stays on what the assistant actually knows.
+            // It is public and anonymous — it answers about services, prices
+            // and locations, never about this patient's record. Promising
+            // "consulta tus citas" here would be a lie the first time somebody
+            // asks.
+            AppListRow(
+              icon: AppIcons.assistant,
+              label: 'Consultar al asistente',
+              supporting: 'Servicios, precios, sedes y horarios',
+              onTap: () => context.push(AppPath.assistantScreen),
             ),
             AppListRow(
               icon: AppIcons.terms,
