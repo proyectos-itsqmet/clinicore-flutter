@@ -4,22 +4,6 @@ import '../../../core/theme/theme.dart';
 import '../atoms/atoms.dart';
 import 'app_card.dart';
 
-/// The square shortcut tile from the mobile board's task rail — the 2x2 grid
-/// of "Agenda tu cita / Mi historia / Resultados / Emergencia" directly under
-/// the hero.
-///
-/// Geometry straight from `design/Mobile.dc.html`:
-///
-/// ```html
-/// <a class="card" style="padding: 16px; min-height: 116px;
-///    display: flex; flex-direction: column;
-///    justify-content: space-between; gap: 10px;">
-/// ```
-///
-/// `justify-content: space-between` is the part that matters: the icon pins
-/// to the top and the label block to the bottom, so tiles with one-line and
-/// two-line labels still line up across the row. Centring the column instead
-/// makes the grid look subtly broken.
 class AppActionTile extends StatelessWidget {
   const AppActionTile({
     super.key,
@@ -34,12 +18,7 @@ class AppActionTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final VoidCallback? onTap;
-
-  /// The red 24/7 tile: emergency fill, white ink, and the icon tile flips to
-  /// the white-at-20% treatment so it stays visible on red.
   final bool emergency;
-
-  /// `min-height: 116px`.
   static const double minHeight = 116;
 
   @override
@@ -65,8 +44,6 @@ class AppActionTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: AppSpacing.xxs,
               children: <Widget>[
-                // The board overrides `.h3` to 16px inside these tiles — a
-                // 19px heading in a 116px box would crowd the subtitle out.
                 Text(
                   title,
                   style: AppTypography.h3.copyWith(
@@ -79,8 +56,6 @@ class AppActionTile extends StatelessWidget {
                     subtitle!,
                     style: AppTypography.cap.copyWith(
                       color: emergency ? AppColors.surface : AppColors.ink3,
-                      // The emergency tile's subtitle is the phone number, and
-                      // the board sets it bold because it is the payload.
                       fontWeight: emergency ? FontWeight.w700 : null,
                     ),
                   ),

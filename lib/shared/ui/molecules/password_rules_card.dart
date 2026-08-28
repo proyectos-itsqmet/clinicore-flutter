@@ -5,34 +5,9 @@ import '../../../core/theme/theme.dart';
 import '../atoms/atoms.dart';
 import 'app_card.dart';
 
-/// The live password checklist: the rules stated up front, ticking themselves
-/// as the user types.
-///
-/// The rules are shown BEFORE they are broken rather than as an error
-/// afterwards. Same information, opposite feeling — and it is the difference
-/// between a form that helps and a form that scolds.
-///
-/// ## Why this is one widget and not two copies
-///
-/// Two screens set a password: the last step of recovery, and "Cambiar
-/// contrasena" inside the account. They must agree, and not approximately —
-/// a checklist that ticks green while `Validators.password` still rejects the
-/// value is a form the patient cannot get out of, with no visible reason.
-/// Keeping the predicates in one place is what makes that impossible.
-///
-/// ## The rules mirror `Validators.password`
-///
-/// Eight characters, at least one letter, at least one digit — deliberately
-/// no symbol requirement and no maximum. NIST dropped composition rules years
-/// ago because they push people toward `Passw0rd!` and away from length,
-/// which is the thing that actually helps. If that validator changes, this
-/// list changes with it or the two start lying to each other.
 class PasswordRulesCard extends StatelessWidget {
   const PasswordRulesCard({super.key, required this.value});
 
-  /// What is currently typed. Not a controller: this widget only reads, and
-  /// taking the raw string keeps it out of the business of when to rebuild —
-  /// that belongs to whoever owns the field.
   final String value;
 
   @override
@@ -49,16 +24,16 @@ class PasswordRulesCard extends StatelessWidget {
             label: 'Al menos una letra',
             met: RegExp(r'[A-Za-z]').hasMatch(value),
           ),
-          _Rule(label: 'Al menos un número', met: RegExp(r'\d').hasMatch(value)),
+          _Rule(
+            label: 'Al menos un número',
+            met: RegExp(r'\d').hasMatch(value),
+          ),
         ],
       ),
     );
   }
 }
 
-/// One line of the checklist. Met rules go `ok` green with a check; unmet ones
-/// stay `ink-3` with a hollow marker — never red, because a rule the user has
-/// not reached yet is not an error.
 class _Rule extends StatelessWidget {
   const _Rule({required this.label, required this.met});
 

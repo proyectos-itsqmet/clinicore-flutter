@@ -10,18 +10,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
-  /// The ceiling on the OS text-size setting.
-  ///
-  /// This is a compromise and should be read as one. The design system has
-  /// fixed-geometry controls — a 54px button, a 46px chip, a 58px code box —
-  /// and past roughly 1.5x the labels stop fitting inside the shapes the brand
-  /// is made of. Clamping keeps the app usable for someone who has turned text
-  /// size up; NOT clamping would break the layout for them instead, which is
-  /// worse.
-  ///
-  /// The way to raise this is to make those controls grow with their content
-  /// rather than to change the number. Most already do (they use `minHeight`,
-  /// not `height`); the ones that do not are the reason the ceiling is here.
   static const double _maxTextScale = 1.5;
 
   @override
@@ -29,19 +17,11 @@ class MainApp extends StatefulWidget {
 }
 
 class _MainAppState extends State<MainApp> {
-  /// Both are built ONCE, in `initState`, and that is load-bearing.
-  ///
-  /// A `GoRouter` created in `build` throws away the whole navigation stack on
-  /// every rebuild, and an `AuthBloc` created in `build` would restart session
-  /// resolution each time — which, with the router listening to it, is an
-  /// infinite loop waiting to happen.
   late final AuthBloc _authBloc = sl<AuthBloc>()..add(const AuthStarted());
   late final AppRouter _appRouter = AppRouter(_authBloc);
 
   @override
   void dispose() {
-    // Registered as a lazy singleton, so it is not disposed here: the locator
-    // owns it, and the app is going away anyway.
     super.dispose();
   }
 
@@ -59,17 +39,7 @@ class _MainAppState extends State<MainApp> {
           title: 'CliniCore',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
-          // No dark theme, and none inherited from the OS. The palette board
-          // defines one set of surfaces with contrast ratios measured against
-          // them; a dark variant needs its own measured palette, not an inverted
-          // copy. Until that exists, honouring a system dark preference would
-          // mean shipping unmeasured colour.
           themeMode: ThemeMode.light,
-
-          // Spanish, and not "whatever the phone is set to". A patient with an
-          // English phone still gets a Spanish clinic app, and without these
-          // delegates the date picker, the text-selection menu and every native
-          // tooltip come out in English inside it.
           locale: const Locale('es'),
           supportedLocales: const <Locale>[Locale('es')],
           localizationsDelegates: const <LocalizationsDelegate<Object>>[

@@ -74,8 +74,19 @@ class Appointment extends Equatable {
 
   final int id;
 
-  /// `TurnDTO.order` — the number called in the waiting room.
-  final int ticket;
+  /// `TurnDTO.ticket` — `"H-003"`, the number called in the waiting room.
+  ///
+  /// A STRING and not the bare `order` int, and that is the whole point. The
+  /// order is counted PER SERVICE AND PER DATE, so two services both have a
+  /// turn #3 on the same day: without the service's letter the number is
+  /// ambiguous, and the patient reading "3" on their phone shares it with
+  /// somebody else in another consulting room.
+  ///
+  /// The backend formats it (`utils/Ticket`); this app never derives it. If it
+  /// did, the same turn could read differently here and on the waiting-room
+  /// screen. When the field is missing it falls back to the bare order — the
+  /// patient loses the prefix, not the number.
+  final String ticket;
 
   final TurnStatus status;
 

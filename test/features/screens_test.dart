@@ -279,7 +279,11 @@ void main() {
         // patient to the wrong slot.
         expect(fakes.booking.lastBookedScheduleId, 103);
         expect(find.text('PASO 4 DE 4'), findsOneWidget);
-        expect(find.text('Numero de turno: 7'), findsOneWidget);
+        // El TICKET, no el orden pelado. Antes decia "7", que es ambiguo: el
+        // orden se cuenta por servicio y por fecha, asi que otro paciente en
+        // otro consultorio tambien es el 7 hoy. Con el prefijo del servicio el
+        // numero que el paciente lee es el mismo que va a escuchar.
+        expect(find.text('Numero de turno: C-007'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -807,6 +811,11 @@ void main() {
 
       expect(find.text('Mi información'), findsOneWidget);
       expect(find.text('Cambiar contraseña'), findsOneWidget);
+      // The assistant is reachable from the login screen for people without an
+      // account. Without this row it becomes unreachable the moment a patient
+      // signs in — the one audience that already trusted the clinic enough to
+      // register loses the feature.
+      expect(find.text('Consultar al asistente'), findsOneWidget);
       expect(find.text('Términos y condiciones'), findsOneWidget);
       expect(find.text('Política de privacidad'), findsOneWidget);
       expect(find.text('Cerrar sesión'), findsOneWidget);

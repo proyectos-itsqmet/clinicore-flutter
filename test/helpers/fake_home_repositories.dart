@@ -90,7 +90,7 @@ class FakeAppointmentsRepository implements AppointmentsRepository {
   /// when it is actually about a cancel failure.
   Either<Failure, Appointment> cancelResult =
       const Right<Failure, Appointment>(
-        Appointment(id: 1, ticket: 7, status: TurnStatus.cancelled),
+        Appointment(id: 1, ticket: 'C-007', status: TurnStatus.cancelled),
       );
 
   /// The turn id the screen actually sent. The assertion that matters most:
@@ -154,7 +154,7 @@ class FakeBookingRepository implements BookingRepository {
   final List<DateTime> schedulesRequestedDates = <DateTime>[];
 
   Either<Failure, Appointment> bookResult = const Right<Failure, Appointment>(
-    Appointment(id: 41, ticket: 7, status: TurnStatus.pending),
+    Appointment(id: 41, ticket: 'C-007', status: TurnStatus.pending),
   );
 
   int getEstablishmentsCallCount = 0;
@@ -314,7 +314,7 @@ final List<BookingSlot> testSlots = <BookingSlot>[
 final List<Appointment> testUpcoming = <Appointment>[
   Appointment(
     id: 1,
-    ticket: 7,
+    ticket: 'C-007',
     status: TurnStatus.pending,
     date: testDay,
     time: '09:00',
@@ -322,7 +322,7 @@ final List<Appointment> testUpcoming = <Appointment>[
     speciality: 'Pediatria',
     locationName: 'Sede Norte',
   ),
-  const Appointment(id: 2, ticket: 8, status: TurnStatus.waiting),
+  const Appointment(id: 2, ticket: 'C-008', status: TurnStatus.waiting),
 ];
 
 /// "Historial"'s fixture: two ATTENDED visits. Only the first (`id: 10`) has
@@ -332,7 +332,7 @@ final List<Appointment> testUpcoming = <Appointment>[
 final List<Appointment> testAttended = <Appointment>[
   Appointment(
     id: 10,
-    ticket: 3,
+    ticket: 'C-003',
     status: TurnStatus.treated,
     date: testDay,
     finishedAt: testDay,
@@ -342,7 +342,7 @@ final List<Appointment> testAttended = <Appointment>[
   ),
   Appointment(
     id: 11,
-    ticket: 1,
+    ticket: 'C-001',
     status: TurnStatus.treated,
     date: DateTime(2025, 5, 3),
     finishedAt: DateTime(2025, 5, 3),

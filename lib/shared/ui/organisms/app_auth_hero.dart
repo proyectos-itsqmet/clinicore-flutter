@@ -5,39 +5,6 @@ import '../../../core/constant/app_icons.dart';
 import '../../../core/theme/theme.dart';
 import '../atoms/atoms.dart';
 
-/// The dark header the auth screens sit under.
-///
-/// It is the mobile board's hero, reduced to the parts that survive without a
-/// full-bleed photograph:
-///
-/// * the `navy-deep` ground,
-/// * the scrim — `linear-gradient(178deg, rgb(12 43 75 / .74) 0%,
-///   rgb(12 43 75 / .58) 34%, rgb(12 43 75 / .88) 74%,
-///   rgb(12 43 75 / .96) 100%)` — which over the flat ground reads as a soft
-///   vertical shading, and over a photo does what it does on the site,
-///   * the brand mark and wordmark at 16px/800 in `display`,
-/// * a `soft` kicker with the live dot,
-/// * `h1` in white and `lead` in **tint**, which is the board's own choice for
-///   body copy on dark (`#EAF2FC`) — not white at reduced opacity.
-///
-/// [kicker], [title] and [subtitle] are ALL optional, and a screen may pass
-/// none of them: the brand row carries the hero on its own. They are null
-/// rather than empty strings on purpose — an empty [Text] still occupies its
-/// line height and still earns its slot in the column's `spacing`, so `''`
-/// buys a phantom gap that is very hard to trace back to the copy.
-///
-/// Pass [image] once `assets/images/` has a hero photograph and the Ken Burns
-/// drift (`scale 1 -> 1.09` over 14s, alternating) comes with it. Until then
-/// the gradient carries the header on its own, which is why the scrim is
-/// reproduced exactly rather than replaced with a flat fill.
-///
-/// ## Collapsing
-///
-/// When the keyboard is up the hero drops everything but the brand row. A
-/// 300px header and a 280px keyboard do not fit on a 390x844 phone at the
-/// same time, and the thing the user needs to see is the field they are
-/// typing into. The collapse runs on [AppMotion.panelSlide], the same
-/// duration the boards use for a panel change.
 class AppAuthHero extends StatelessWidget {
   const AppAuthHero({
     super.key,
@@ -53,32 +20,15 @@ class AppAuthHero extends StatelessWidget {
   final String? title;
   final String? kicker;
   final String? subtitle;
-
-  /// True while the keyboard is up.
   final bool collapsed;
-
-  /// Shows the back affordance beside the brand mark. It is the mobile
-  /// board's own nav button — a 44x44 circle filled with
-  /// `rgb(255 255 255 / .18)`, which is the [AppGlass] fill without the blur,
-  /// because there is nothing behind it worth blurring on a flat scrim.
   final VoidCallback? onBack;
-
-  /// Optional hero photograph, drawn under the scrim.
   final ImageProvider? image;
-
   final String brandName;
-
-  /// `linear-gradient(178deg, ...)` — the 2 degrees off vertical are what stop
-  /// the scrim reading as a mechanical fade.
   static const List<double> _scrimStops = <double>[0, 0.34, 0.74, 1];
   static const List<double> _scrimAlphas = <double>[0.74, 0.58, 0.88, 0.96];
 
   @override
   Widget build(BuildContext context) {
-    // The hero bleeds under the status bar, so the status bar's glyphs have to
-    // flip to light for as long as it is on screen. `AnnotatedRegion` scopes
-    // that to this widget: leave the auth flow and the app's default dark
-    // glyphs come back on their own, with nothing to remember to reset.
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -196,8 +146,6 @@ class _BrandRow extends StatelessWidget {
   }
 }
 
-/// The mobile board's nav button: a 44x44 circle at
-/// `background-color: rgb(255 255 255 / .18)` with a white glyph.
 class _HeroBackButton extends StatelessWidget {
   const _HeroBackButton({required this.onTap});
 
